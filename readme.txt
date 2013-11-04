@@ -18,7 +18,7 @@ If you have any question about this plugin you may visit <a href= "http://www.zm
  
 
  
-=== WordPress Author / User Image: FEATURE ===
+Author or User Image: FEATURE
 
 1. Set a default image for any user. (Who not set there Image)
 2. Individually set user's image by user. (This image will be shown instead of the default image)
@@ -40,7 +40,7 @@ If you have any question about this plugin you may visit <a href= "http://www.zm
 10. Ability to list all users who is in your blacklist. (PRO)
 
 If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/" rel="follow">WordPress Author or User Image</a>.
- 
+*PRO Upcoming.
 
 == Installation ==
 
