@@ -1,6 +1,6 @@
 ﻿=== Author or User Image ===
 Plugin Name:Author or User Image
-Contributors: Alimuzzaman Alim
+Contributors: <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">Alimuzzaman Alim</a>
 Author: Md. Alimuzzaman Alim
 Donate link: none
 Tags: author, authors, image, avatar, widget, icon, post, list, zm-tech.
@@ -14,7 +14,7 @@ WordPress Author / User Image lets you set author image.
 By this plugin you will be able to set author image.
 This photo will be appears below the post in about author section and also in there comment. When you have many user your user's will be able to set there photo. It appears in comment. You have ability to resize the uploaded image. So no extra disk space or bandwidth will be loss. The most Amazing part of this plugin is you can set a default image for your user. If any of your user not set there image then show the default image.
 
-If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">WordPress Author or User Image</a>.
+If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/" rel="follow">WordPress Author or User Image</a>.
  
 
  
