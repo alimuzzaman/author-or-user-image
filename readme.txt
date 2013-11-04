@@ -1,4 +1,4 @@
-=== Author or User Image ===
+﻿=== Author or User Image ===
 Plugin Name:Author or User Image
 Contributors: Alimuzzaman Alim
 Author: Md. Alimuzzaman Alim
@@ -6,7 +6,6 @@ Donate link: none
 Tags: author, authors, image, avatar, widget, icon, post, list, zm-tech.
 Requires at least: 3.5.0
 Tested up to: 3.6.1
-Version: 1.0.1
 Stable tag: 1.0.1
 License: GPLv2
 
