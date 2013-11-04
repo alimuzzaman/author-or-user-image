@@ -1,7 +1,7 @@
 <?php
 /**
  * @package Author_Image
- * @version 1.0.0
+ * @version 1.0.1
  */
 /*
 Plugin Name:WordPress Author Image
