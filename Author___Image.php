@@ -1,15 +1,15 @@
 <?php
 /**
  * @package Author_Image
- * @version 1.0.0
+ * @version 1.0.1
  */
 /*
 Plugin Name:WordPress Author Image
-Plugin URI: http://www.zm-tech.net/
+Plugin URI: http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/
 Description: This plugin for <cite>Author Image</cite>
 Author: Alimuzzaman Alim
-Version: 1.0.0
-Author URI:  http://www.zm-tech.net
+Version: 1.0.1
+Author URI:  http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/
 */
 
 

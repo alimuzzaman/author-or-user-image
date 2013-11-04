@@ -1,13 +1,12 @@
-=== Author or User Image ===
+﻿=== Author or User Image ===
 Plugin Name:Author or User Image
-Contributors: www.zm-tech.net
+Contributors: Alimuzzaman Alim
 Author: Md. Alimuzzaman Alim
 Donate link: none
 Tags: author, authors, image, avatar, widget, icon, post, list, zm-tech.
 Requires at least: 3.5.0
 Tested up to: 3.6.1
-Version: 1.0.0
-Stable tag: trunk
+Stable tag: 1.0.1
 License: GPLv2
 
 == Description == 
@@ -15,6 +14,7 @@ WordPress Author / User Image lets you set author image.
 By this plugin you will be able to set author image.
 This photo will be appears below the post in about author section and also in there comment. When you have many user your user's will be able to set there photo. It appears in comment. You have ability to resize the uploaded image. So no extra disk space or bandwidth will be loss. The most Amazing part of this plugin is you can set a default image for your user. If any of your user not set there image then show the default image.
 
+If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">WordPress Author or User Image</a>.
  
 
  
@@ -39,6 +39,7 @@ This photo will be appears below the post in about author section and also in th
 
 10. Ability to list all users who is in your blacklist. (PRO)
 
+If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">WordPress Author or User Image</a>.
  
 
 == Installation ==
@@ -55,6 +56,7 @@ To Set Image:
 
 5. At last click on save image to upload the image.
 
+If you have any question about installation you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">WordPress Author or User Image</a>.
  
 
 To Update Image:
@@ -70,17 +72,24 @@ To Remove/Delete Image
 == Changelog ==
 
 1.0.0:First Version.
+1.0.1: Second Version
+Remove a unuse file.
 
 == Upgrade Notice ==
 
 NO upgrade notice.
+If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">WordPress Author or User Image</a>.
 
 == Screenshots == 
 
-http://www.zm-tech.net/wp-content/uploads/2013/10/WordPress-Author-User-Image-300x221.png
+1. http://www.zm-tech.net/wp-content/uploads/2013/10/WordPress-Author-User-Image-300x221.png
+
+If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">WordPress Author or User Image</a>.
 
 == Frequently Asked Questions == 
 
 1. Its work well on first time but when change the image this take some time to change the image.
 
-     Ans: Pleas clear your browser cache. If you have any cache plugin please clear the cache from that plugin.
+     Ans: Pleas clear your browser cache.
+If you have any cache plugin please clear the cache from that plugin.If you have any question about this plugin you may visit <a href= "http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/">WordPress Author or User Image</a>.
+	 
