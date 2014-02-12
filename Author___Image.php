@@ -6,7 +6,7 @@
 /*
 Plugin Name:WordPress Author Image
 Plugin URI: http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/
-Description: This plugin for <cite>Author Image</cite>
+Description: This plugin is for Author Image. You and your users will be able to set image. The image will be appears in comment and about author section.
 Author: Alimuzzaman Alim
 Version: 1.0.2
 Author URI:  http://www.zm-tech.net/wp-plugins/wordpress-author-or-user-image/
