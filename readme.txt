@@ -7,6 +7,7 @@ Tags: author, authors, image, avatar, widget, icon, post, list, zm-tech.
 Requires at least: 3.5.0
 Tested up to: 3.8.1
 Stable tag: 1.0.2
+Version: 1.0.2
 License: GPLv2
 
 == Description == 
