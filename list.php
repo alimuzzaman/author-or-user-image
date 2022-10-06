@@ -5,7 +5,7 @@ class zm_ai_list{
 		add_action('wp_ajax_changerole', array($this,'changerole'));
 		add_action('wp_ajax_zm_dban', array($this,'zm_dban'));
 	}
-	
+
 	function zm_delete_pic(){
 		if(wp_verify_nonce($_POST['non'],"zmdelete")){
 			$id=$_POST['id'];
@@ -27,13 +27,13 @@ class zm_ai_list{
 			echo "Failed";
 		exit;
 	}
-	
+
 	function zm_dban(){
 		if(wp_verify_nonce($_POST['non'],"dsban")||wp_verify_nonce($_POST['non'],"zmdelete")){
 			$id=$_POST['id'];
 			$ids="";
 			$ids=get_option("zm_ai_ban_id");
-			
+
 			if(!is_array($id)){
 				if($this->delimg($id)){
 					if(is_array($ids)){
@@ -52,6 +52,7 @@ class zm_ai_list{
 				exit;
 			}
 			else {
+				$idss = '';
 				foreach($id as $val){
 					if($this->delimg($val))
 						$idss.="<id>".$val."</id>";
@@ -72,7 +73,7 @@ class zm_ai_list{
 			echo "Failed";
 		exit;
 	}
-	
+
 	function delimg($id){
 		$udir=wp_upload_dir();
 		$udir=$udir['basedir']."/author-image/".$id.".jpg" ;
@@ -85,7 +86,7 @@ class zm_ai_list{
 		else
 			return false;
 	}
-	
+
 	function changerole(){
 		if(wp_verify_nonce($_POST['non'],"zmdelete")){
 	?>
@@ -100,7 +101,7 @@ class zm_ai_list{
 		for($i=2;$i<count($imgs);$i++){
 			$id=str_replace(".jpg","", $imgs[$i]);
 			if($_POST['role']=="All")
-				$_POST[role]="read";
+				$_POST['role']="read";
 			$idd= get_user_by( "login", $id);
 			if(user_can($idd,$_POST['role']) || $_POST['role']==""){
 				$x=!$x;
@@ -128,14 +129,14 @@ class zm_ai_list{
 	exit;
 		}
 	}
-	
+
 	public function listuser (){
 		$surl=get_option('siteurl');
 	?>
 	<div class="wrap">
-	  
+
 	  <h2>Author Image List</h2>
-	
+
 	<?php $this->tablenav();?>
 	  <table id="tbl" class="wp-list-table widefat fixed users">
 	  <tr><th width=30px><input   class=chkall type="checkbox" ></th><th>User Login Name</th><th>User Display Name</th><th width=150px>User Picture</th><th>Action</th></tr>
@@ -150,13 +151,13 @@ class zm_ai_list{
 		}
 		else{
 			$path=$upload_dir['basedir']."/author-image/";
-			$imgs=scandir($path);	
+			$imgs=scandir($path);
 			$ii=2;
 		}
 		$x=false;
 		if(empty($imgs))
 			echo "<tr><td colspan='5'>Sorry nothing found</td><tr>";
-		
+
 		for($i=$ii;$i<count($imgs);$i++){
 			$id=str_replace(".jpg","", $imgs[$i]);
 			if(isset($banarr) and $banarr)
@@ -183,12 +184,12 @@ class zm_ai_list{
 		<tr><th><input type=checkbox class=chkall ></th><th>User Login Name</th><th>User Display Name</th><th>User Picture</th><th>Action</th></tr>
 		</table>
 	<?php $this->tablenav(2);?>
-	   
+
 	</div>
 	<?php
 	}
-	
-	
+
+
 	function subb ($id){
 		return"
 		<input class='button action ds' id='".$id  ."' type=submit value='Delete Picture' name='delete' style='margin-bottom:15px' />
@@ -220,7 +221,7 @@ class zm_ai_list{
 			<input type="submit" name="changerole" id="<?php echo $id;?>" class="button changer" value="Change">
 		</div>
 		<div class="tablenav-pages one-page lodingg" id="loding" >
-			
+
 		</div>
 	</div>
 	<?php

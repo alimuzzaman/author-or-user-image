@@ -28,7 +28,7 @@ class zm_ai_black_list{
 				}
 				foreach($ub as $ii)
 					echo "<id>".$ii."</id>";
-				update_option("zm_ai_ban_id",$ids);			
+				update_option("zm_ai_ban_id",$ids);
 				exit;
 			}
 		}
@@ -46,7 +46,7 @@ class zm_ai_black_list{
 	<?php
 		$upload_dir = wp_upload_dir();
 		$imgs=get_option("zm_ai_ban_id");
-		
+
 		if(empty($imgs))
 			echo "<tr><td colspan='5'>Sorry nothing found</td><tr>";
 		for($i=0;$i<count($imgs);$i++){
@@ -79,23 +79,23 @@ class zm_ai_black_list{
 		}
 	exit;
 	}
-	
+
 	public function listuser (){
 		$surl=get_option('siteurl');
 	?>
 	<div class="wrap">
-	  
+
 	  <h2>Author Image Black List</h2>
-	
+
 	<?php $this->tablenav();?>
 	  <table id="tbl" class="wp-list-table widefat fixed users">
 	  <tr><th width=30px><input class=chkall type="checkbox" ></th><th>User Login Name</th><th>User Display Name</th><th>Action</th></tr>
 	  <?php
 		$upload_dir = wp_upload_dir();
-		$ban=get_option("zm_ai_ban_id");
-		
+		$ban=get_option("zm_ai_ban_id", []);
+
 		if(empty($ban))
-			echo "<tr><td colspan='5'>Sorry nothing found</td><tr>";	
+			echo "<tr><td colspan='5'>Sorry nothing found</td><tr>";
 		for($i=0;$i<count($ban);$i++){
 			$id=$ban[$i];
 			$idd = get_user_by( "login", $id);
@@ -118,16 +118,16 @@ class zm_ai_black_list{
 		<tr><th><input type=checkbox class=chkall ></th><th>User Login Name</th><th>User Display Name</th><th>Action</th></tr>
 		</table>
 	<?php $this->tablenav(2);?>
-	   
+
 	</div>
 	<?php
 	}
-		
+
 	function subb ($id){
 		return"
 		<input class='button action unblock' id='".$id  ."' type=submit value='Unblock user' name=delete /> " ;
 	}
-	
+
 	function tablenav($id="1"){
 	?>
 		<div class="tablenav top">
@@ -152,7 +152,7 @@ class zm_ai_black_list{
 			<input type="submit" name="changerole" id="<?php echo $id;?>" class="button changer" value="Change">
 		</div>
 		<div class="tablenav-pages one-page lodingg" id="loding" >
-			
+
 		</div>
 	</div>
 	<?php
