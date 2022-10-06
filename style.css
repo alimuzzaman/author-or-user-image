@@ -1,0 +1,33 @@
+#ai_message{
+	position:relative;
+}
+.ai-notification-close {
+position: absolute;
+top: 5px;
+right: 10px;
+padding: 10px 15px 0 3px;
+font-size: 13px;
+text-decoration: none;
+line-height: 1;
+}
+.ai-notification-close:before {
+background: 0 0;
+color: #BBB;
+content: '\f153';
+display: block!important;
+font: 400 16px/1 dashicons;
+speak: none;
+height: 20px;
+text-align: center;
+width: 20px;
+-webkit-font-smoothing: antialiased!important;
+
+position: absolute;
+left: -18px;
+margin-top: -2px;
+-webkit-transition: all .1s ease-in-out;
+transition: all .1s ease-in-out;
+}
+.ai-notification-close:hover:before {
+color: #C00;
+}
