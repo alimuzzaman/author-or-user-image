@@ -84,15 +84,15 @@ class Page
      */
     public function enqueueScripts(string $hook): void
     {
-        wp_enqueue_style('ai_styles', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'style.css');
-        wp_enqueue_script('ai_notification_close', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'scripts.js', ['jquery']);
+        wp_enqueue_style('ai_styles', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'assets/css/style.css');
+        wp_enqueue_script('ai_notification_close', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'assets/js/scripts.js', ['jquery']);
 
         if ($hook === 'users_page_Author_Image_List') {
-            wp_enqueue_script('my_custom_script', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'list_user.js', ['jquery']);
+            wp_enqueue_script('my_custom_script', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'assets/js/list_user.js', ['jquery']);
         }
 
         if ($hook === 'users_page_Author_Image_Black_List') {
-            wp_enqueue_script('my_custom_script', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'block_user.js', ['jquery']);
+            wp_enqueue_script('my_custom_script', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'assets/js/block_user.js', ['jquery']);
         }
 
         // Inline script with nonces

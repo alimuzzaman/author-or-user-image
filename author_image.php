@@ -80,7 +80,7 @@ if (!function_exists('get_avatar')) :
         if ($op) {
             $avatar = "<img alt='{$alt}' title='Author Image' src='{$op}' class='avatar avatar-{$size} photo avatar-default' width='{$size}' />";
         } else {
-            $avatar = "<img alt='{$alt}' title='Author Image' src='" . plugin_dir_url(__FILE__) . "default-user-image.png' class='avatar avatar-{$size} photo avatar-default' width='{$size}' />";
+            $avatar = "<img alt='{$alt}' title='Author Image' src='" . plugin_dir_url(__FILE__) . "assets/images/default-user-image.png' class='avatar avatar-{$size} photo avatar-default' width='{$size}' />";
         }
 
         return apply_filters('get_avatar', $avatar, $id_or_email, $size, $default, $alt);
