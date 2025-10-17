@@ -1,4 +1,5 @@
 <?php
+
 namespace AuthorImage\Service;
 
 if (! defined('ABSPATH')) {
@@ -19,7 +20,7 @@ class OptionStore
     public function getBannedUsers(): array
     {
         $banned = get_option('zm_ai_ban_id', []);
-        
+
         return is_array($banned) ? $banned : [];
     }
 
@@ -32,13 +33,13 @@ class OptionStore
     public function addBannedUser(string $login): bool
     {
         $banned = $this->getBannedUsers();
-        
+
         if (!in_array($login, $banned)) {
             $banned[] = $login;
             update_option('zm_ai_ban_id', $banned);
             return true;
         }
-        
+
         return false;
     }
 
@@ -52,13 +53,13 @@ class OptionStore
     {
         $banned = $this->getBannedUsers();
         $key = array_search($login, $banned);
-        
+
         if ($key !== false) {
             array_splice($banned, $key, 1);
             update_option('zm_ai_ban_id', $banned);
             return true;
         }
-        
+
         return false;
     }
 
@@ -71,7 +72,7 @@ class OptionStore
     public function isUserBanned(string $login): bool
     {
         $banned = $this->getBannedUsers();
-        
+
         return in_array($login, $banned);
     }
 
@@ -96,7 +97,7 @@ class OptionStore
         if (!add_option('author_image_size', $size, '', 'no')) {
             return update_option('author_image_size', $size);
         }
-        
+
         return true;
     }
 

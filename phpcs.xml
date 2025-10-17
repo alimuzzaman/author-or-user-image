@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<ruleset name="Author Image Plugin">
+    <description>PHP_CodeSniffer ruleset for Author Image plugin</description>
+
+    <!-- Check all PHP files in the plugin -->
+    <file>./src</file>
+    <file>./author_image.php</file>
+
+    <!-- Exclude vendor and node_modules -->
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*.js</exclude-pattern>
+    <exclude-pattern>*.css</exclude-pattern>
+
+    <!-- Use PSR-12 as base standard -->
+    <rule ref="PSR12"/>
+
+    <!-- Allow certain WordPress-specific patterns -->
+    <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
+        <exclude-pattern>*/author_image.php</exclude-pattern>
+    </rule>
+
+    <!-- Show progress -->
+    <arg value="ps"/>
+
+    <!-- Use colors in output -->
+    <arg name="colors"/>
+
+    <!-- Check up to 8 files simultaneously -->
+    <arg name="parallel" value="8"/>
+</ruleset>

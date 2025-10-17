@@ -1,4 +1,5 @@
 <?php
+
 namespace AuthorImage\Service;
 
 if (! defined('ABSPATH')) {
@@ -21,11 +22,11 @@ class FileManager
     {
         $udir = wp_upload_dir();
         $filePath = $udir['basedir'] . '/author-image/' . $login . '.jpg';
-        
+
         if (is_file($filePath)) {
             return unlink($filePath);
         }
-        
+
         return false;
     }
 
@@ -39,7 +40,7 @@ class FileManager
     {
         $udir = wp_upload_dir();
         $filePath = $udir['basedir'] . '/author-image/' . $login . '.jpg';
-        
+
         return file_exists($filePath);
     }
 
@@ -55,7 +56,7 @@ class FileManager
             $udir = wp_upload_dir();
             return $udir['baseurl'] . '/author-image/' . $login . '.jpg';
         }
-        
+
         return false;
     }
 
@@ -68,23 +69,23 @@ class FileManager
     {
         $udir = wp_upload_dir();
         $path = $udir['basedir'] . '/author-image/';
-        
+
         if (!file_exists($path)) {
             return [];
         }
-        
+
         $imgs = scandir($path);
         $result = [];
-        
+
         foreach ($imgs as $img) {
             if ($img === '.' || $img === '..') {
                 continue;
             }
-            
+
             $login = str_replace('.jpg', '', $img);
             $result[] = $login;
         }
-        
+
         return $result;
     }
 
@@ -97,7 +98,7 @@ class FileManager
     {
         $udir = wp_upload_dir();
         $path = $udir['basedir'] . '/author-image/';
-        
+
         return wp_mkdir_p($path);
     }
 
@@ -112,30 +113,30 @@ class FileManager
     public function uploadImage(array $uploadedFile, string $login, array $size)
     {
         $this->ensureDirectoryExists();
-        
+
         $wp_filetype = wp_check_filetype_and_ext($uploadedFile['tmp_name'], $uploadedFile['name'], false);
-        
+
         if (!wp_match_mime_types('image', $wp_filetype['type'])) {
             return new \WP_Error('invalid_image', __('The uploaded file is not a valid image. Please try again.'));
         }
-        
+
         $image = wp_get_image_editor($uploadedFile['tmp_name']);
-        
+
         if (is_wp_error($image)) {
             return $image;
         }
-        
+
         $image->resize($size['width'], $size['h']);
-        
+
         $udir = wp_upload_dir();
         $path = $udir['basedir'] . '/author-image/' . $login . '.jpg';
-        
+
         $saved = $image->save($path);
-        
+
         if (is_wp_error($saved)) {
             return $saved;
         }
-        
+
         return true;
     }
 
@@ -149,30 +150,30 @@ class FileManager
     {
         $udir = wp_upload_dir();
         $dir = $udir['basedir'] . '/author-image/';
-        
+
         if (!file_exists($dir)) {
             return 0;
         }
-        
+
         $count = 0;
         $d = dir($dir);
-        
+
         while ($file = $d->read()) {
             if ($file === '.' || $file === '..') {
                 continue;
             }
-            
+
             $image = wp_get_image_editor($dir . $file);
-            
+
             if (!is_wp_error($image)) {
                 $image->resize($size['width'], $size['h']);
                 $image->save($dir . $file);
                 $count++;
             }
         }
-        
+
         $d->close();
-        
+
         return $count;
     }
 }

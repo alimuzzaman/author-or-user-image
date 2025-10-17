@@ -1,4 +1,5 @@
 <?php
+
 namespace AuthorImage;
 
 use AuthorImage\Service\FileManager;
@@ -26,16 +27,16 @@ class Plugin
         // Initialize services
         $this->fileManager = new FileManager();
         $this->optionStore = new OptionStore();
-        
+
         // Initialize admin pages
         $this->adminPage = new Page($this->fileManager, $this->optionStore);
-        
+
         // Initialize legacy AJAX handlers
         $this->legacyShim = new LegacyShim($this->fileManager, $this->optionStore);
-        
+
         // Initialize REST API controller
         $this->restController = new Controller($this->fileManager, $this->optionStore);
-        
+
         // Hook into WordPress lifecycle
         add_action('init', [$this, 'init']);
     }

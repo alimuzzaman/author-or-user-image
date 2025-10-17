@@ -1,4 +1,5 @@
 <?php
+
 namespace AuthorImage\REST;
 
 use AuthorImage\Service\FileManager;
@@ -25,7 +26,7 @@ class Controller
     {
         $this->fileManager = $fileManager;
         $this->optionStore = $optionStore;
-        
+
         add_action('rest_api_init', [$this, 'registerRoutes']);
     }
 
@@ -131,21 +132,21 @@ class Controller
         $role = $request->get_param('role');
         $images = $this->fileManager->getAllImages();
         $banned = $this->optionStore->getBannedUsers();
-        
+
         $result = [];
-        
+
         foreach ($images as $login) {
             if ($login === '.' || $login === '..') {
                 continue;
             }
-            
+
             $user = get_user_by('login', $login);
-            
+
             // Skip banned users and non-existent users
             if (!$user || in_array($login, $banned)) {
                 continue;
             }
-            
+
             // Filter by role if specified
             if ($role && $role !== 'all') {
                 $roleFilter = $role === 'All' ? 'read' : $role;
@@ -153,7 +154,7 @@ class Controller
                     continue;
                 }
             }
-            
+
             $result[] = [
                 'login' => $login,
                 'display_name' => $user->display_name,
@@ -162,7 +163,7 @@ class Controller
                 'is_default' => $login === 'author_default',
             ];
         }
-        
+
         return new WP_REST_Response($result, 200);
     }
 
@@ -172,16 +173,16 @@ class Controller
     public function getImage(WP_REST_Request $request): WP_REST_Response
     {
         $login = $request->get_param('login');
-        
+
         if (!$this->fileManager->imageExists($login)) {
             return new WP_REST_Response([
                 'error' => 'Image not found',
             ], 404);
         }
-        
+
         $user = get_user_by('login', $login);
         $imageUrl = $this->fileManager->getImageUrl($login);
-        
+
         return new WP_REST_Response([
             'login' => $login,
             'display_name' => $user ? $user->display_name : '',
@@ -196,14 +197,14 @@ class Controller
     public function deleteImage(WP_REST_Request $request): WP_REST_Response
     {
         $login = $request->get_param('login');
-        
+
         if ($this->fileManager->deleteImage($login)) {
             return new WP_REST_Response([
                 'success' => true,
                 'login' => $login,
             ], 200);
         }
-        
+
         return new WP_REST_Response([
             'error' => 'Failed to delete image',
         ], 500);
@@ -216,10 +217,10 @@ class Controller
     {
         $banned = $this->optionStore->getBannedUsers();
         $result = [];
-        
+
         foreach ($banned as $login) {
             $user = get_user_by('login', $login);
-            
+
             if ($user) {
                 $result[] = [
                     'login' => $login,
@@ -228,7 +229,7 @@ class Controller
                 ];
             }
         }
-        
+
         return new WP_REST_Response($result, 200);
     }
 
@@ -238,13 +239,13 @@ class Controller
     public function addToBanList(WP_REST_Request $request): WP_REST_Response
     {
         $login = $request->get_param('login');
-        
+
         // Delete the image first
         $this->fileManager->deleteImage($login);
-        
+
         // Add to ban list
         $this->optionStore->addBannedUser($login);
-        
+
         return new WP_REST_Response([
             'success' => true,
             'login' => $login,
@@ -257,14 +258,14 @@ class Controller
     public function removeFromBanList(WP_REST_Request $request): WP_REST_Response
     {
         $login = $request->get_param('login');
-        
+
         if ($this->optionStore->removeBannedUser($login)) {
             return new WP_REST_Response([
                 'success' => true,
                 'login' => $login,
             ], 200);
         }
-        
+
         return new WP_REST_Response([
             'error' => 'User not found in ban list',
         ], 404);
@@ -277,39 +278,39 @@ class Controller
     {
         $action = $request->get_param('action');
         $logins = $request->get_param('logins');
-        
+
         $results = [
             'success' => [],
             'failed' => [],
         ];
-        
+
         foreach ($logins as $login) {
             $login = sanitize_user($login);
             $success = false;
-            
+
             switch ($action) {
                 case 'delete':
                     $success = $this->fileManager->deleteImage($login);
                     break;
-                    
+
                 case 'ban':
                     $this->fileManager->deleteImage($login);
                     $this->optionStore->addBannedUser($login);
                     $success = true;
                     break;
-                    
+
                 case 'unban':
                     $success = $this->optionStore->removeBannedUser($login);
                     break;
             }
-            
+
             if ($success) {
                 $results['success'][] = $login;
             } else {
                 $results['failed'][] = $login;
             }
         }
-        
+
         return new WP_REST_Response($results, 200);
     }
 

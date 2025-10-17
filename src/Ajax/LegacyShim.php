@@ -1,4 +1,5 @@
 <?php
+
 namespace AuthorImage\Ajax;
 
 use AuthorImage\Service\FileManager;
@@ -21,7 +22,7 @@ class LegacyShim
     {
         $this->fileManager = $fileManager;
         $this->optionStore = $optionStore;
-        
+
         $this->registerHooks();
     }
 
@@ -31,11 +32,11 @@ class LegacyShim
         add_action('wp_ajax_zmdeleteimg', [$this, 'handleDeleteImage']);
         add_action('wp_ajax_changerole', [$this, 'handleChangeRole']);
         add_action('wp_ajax_zm_dban', [$this, 'handleAddToBanList']);
-        
+
         // Black_list.php actions
         add_action('wp_ajax_zm_unblock', [$this, 'handleUnblock']);
         add_action('wp_ajax_zm_uchangerole', [$this, 'handleUserChangeRole']);
-        
+
         // Author_image.php actions
         add_action('wp_ajax_ai-notification-close', [$this, 'handleNotificationClose']);
     }
@@ -76,8 +77,10 @@ class LegacyShim
      */
     public function handleAddToBanList(): void
     {
-        if (!wp_verify_nonce($_POST['non'] ?? '', 'dsban') && 
-            !wp_verify_nonce($_POST['non'] ?? '', 'zmdelete')) {
+        if (
+            !wp_verify_nonce($_POST['non'] ?? '', 'dsban') &&
+            !wp_verify_nonce($_POST['non'] ?? '', 'zmdelete')
+        ) {
             echo 'Failed';
             exit;
         }
@@ -145,13 +148,13 @@ class LegacyShim
                     echo "<tr id='tr{$id}' >";
                 }
                 echo "<th><input id='{$id}' class='chk' type=checkbox ></th>";
-                
+
                 if ($id === 'author_default') {
                     echo "<td>The Detault Image</td>";
                 } else {
                     echo "<td>{$idd->user_login}</td>";
                 }
-                
+
                 echo "<td>{$idd->display_name}</td>";
                 echo "<td><img width=100px src='{$upload_dir['baseurl']}/author-image/{$imgs[$i]}' /></td>";
                 echo "<td id='td{$id}'>";
@@ -232,13 +235,13 @@ class LegacyShim
                     echo "<tr id='tr{$id}' >";
                 }
                 echo "<th><input id='{$id}' class='chk' type=checkbox ></th>";
-                
+
                 if ($id === 'author_default') {
                     echo "<td>The Detault Image</td>";
                 } else {
                     echo "<td>{$idd->user_login}</td>";
                 }
-                
+
                 echo "<td>{$idd->display_name}</td>";
                 echo "<td id='td{$id}'>";
                 echo $this->renderUnblockButton($id);

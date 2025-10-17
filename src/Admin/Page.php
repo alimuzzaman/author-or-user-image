@@ -1,4 +1,5 @@
 <?php
+
 namespace AuthorImage\Admin;
 
 use AuthorImage\Service\FileManager;
@@ -20,7 +21,7 @@ class Page
     {
         $this->fileManager = $fileManager;
         $this->optionStore = $optionStore;
-        
+
         $this->registerHooks();
     }
 
@@ -29,7 +30,7 @@ class Page
         add_action('admin_menu', [$this, 'registerAdminPages']);
         add_action('admin_init', [$this, 'handleFormSubmissions']);
         add_action('admin_enqueue_scripts', [$this, 'enqueueScripts']);
-        
+
         register_activation_hook(AUTHOR_IMAGE_PLUGIN_FILE, [$this, 'pluginActivate']);
     }
 
@@ -89,7 +90,7 @@ class Page
         if ($hook === 'users_page_Author_Image_List') {
             wp_enqueue_script('my_custom_script', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'list_user.js', ['jquery']);
         }
-        
+
         if ($hook === 'users_page_Author_Image_Black_List') {
             wp_enqueue_script('my_custom_script', plugin_dir_url(AUTHOR_IMAGE_PLUGIN_FILE) . 'block_user.js', ['jquery']);
         }
@@ -113,7 +114,7 @@ class Page
     {
         $upload_dir = wp_upload_dir();
         $path = $upload_dir['basedir'] . '/author-image/';
-        
+
         if (file_exists($path)) {
             $imgs = scandir($path);
             if ($imgs) {
@@ -154,13 +155,13 @@ class Page
      */
     public function showAdminNotice(): void
     {
-        if (!$this->optionStore->getNotificationStatus()):
-        ?>
+        if (!$this->optionStore->getNotificationStatus()) :
+            ?>
         <div id="ai_message" class="updated below-h1">
             <a class="ai-notification-close" href="?ai_notification=1">Dismiss</a>
             <p>Default Image is not set yet. <a href="users.php?page=Author_Image">Please set a default Image.</a></p>
         </div>
-        <?php
+            <?php
         endif;
     }
 
@@ -176,14 +177,14 @@ class Page
         $current_user = wp_get_current_user();
         $user_ID = $current_user->user_login;
         $dir = WP_CONTENT_DIR . '/uploads/author-image/';
-        
+
         $this->fileManager->ensureDirectoryExists();
 
         // Handle size change
         if (isset($_POST['size'])) {
             $size = $_POST['size'];
             $currentSize = $this->optionStore->getImageSize();
-            
+
             if ($size != $currentSize) {
                 $this->optionStore->updateImageSize($size);
                 $this->fileManager->resizeAllImages($size);
@@ -228,7 +229,7 @@ class Page
                 <input type="hidden" id="___wpnonce" name="___wpnonce" value="<?php echo $nonce; ?>">
                 <table class="form-table">
                     <tbody>
-                        <?php if (current_user_can('administrator')): ?>
+                        <?php if (current_user_can('administrator')) : ?>
                         <tr valign="top">
                             <th scope="row"><label for="author_default">Default Image</label></th>
                             <td>
@@ -274,17 +275,21 @@ class Page
                 <input type="hidden" id="___wpnonce" name="___wpnonce" value="<?php echo $nonce; ?>">
                 <input type="hidden" name="rem" value="true" />
                 <p style="margin-left:22px">
-                    <?php if (current_user_can('administrator')): ?>
+                    <?php if (current_user_can('administrator')) : ?>
                     <label>
                         <input type="hidden" name="ad" value="true" />
                         <input type="checkbox" name="author_default_image" value="true" id="CheckboxGroup1_0"
-                            <?php if (!file_exists($dir . 'author_default.jpg')) echo 'disabled'; ?> />
+                            <?php if (!file_exists($dir . 'author_default.jpg')) {
+                                echo 'disabled';
+                            } ?> />
                         Default
                     </label>
                     <br /><br /><br />
                     <label>
                         <input type="checkbox" name="author_image" value="true" id="CheckboxGroup1_1"
-                            <?php if (!file_exists($dir . $user_ID . '.jpg')) echo 'disabled'; ?> />
+                            <?php if (!file_exists($dir . $user_ID . '.jpg')) {
+                                echo 'disabled';
+                            } ?> />
                         Your
                     </label>
                     <br />
@@ -351,13 +356,13 @@ class Page
                             echo "<tr id='tr{$id}'>";
                         }
                         echo "<th><input id='{$id}' class='chk' type=checkbox></th>";
-                        
+
                         if ($id === 'author_default') {
                             echo "<td>The Detault Image</td>";
                         } else {
                             echo "<td>{$idd->user_login}</td>";
                         }
-                        
+
                         echo "<td>{$idd->display_name}</td>";
                         echo "<td><img width=100px src='{$upload_dir['baseurl']}/author-image/{$id}.jpg' /></td>";
                         echo "<td id='td{$id}'>";
@@ -416,13 +421,13 @@ class Page
                             echo "<tr id='tr{$id}'>";
                         }
                         echo "<th><input id='{$id}' class='chk' type=checkbox></th>";
-                        
+
                         if ($id === 'author_default') {
                             echo "<td>The Detault Image</td>";
                         } else {
                             echo "<td>{$idd->user_login}</td>";
                         }
-                        
+
                         echo "<td>{$idd->display_name}</td>";
                         echo "<td id='td{$id}'>";
                         echo $this->renderUnblockButton($id);
