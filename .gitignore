@@ -6,3 +6,4 @@ assets/dist/
 .vscode/
 .DS_Store
 /.cache/
+.phpunit.result.cache
