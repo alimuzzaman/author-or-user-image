@@ -44,14 +44,14 @@ class ReleaseCheckTests(unittest.TestCase):
 
     def test_rejects_v_prefixed_tag(self) -> None:
         with self.assertRaises(RELEASE_CHECK.ReleaseCheckError):
-            RELEASE_CHECK.validate_tag("v3.0.1")
+            RELEASE_CHECK.validate_tag("v3.1.0")
 
     def test_rejects_mismatched_header_version(self) -> None:
         entry = self.project / "author_image.php"
         source = entry.read_text(encoding="utf-8")
-        entry.write_text(source.replace("Version: 3.0.1", "Version: 9.9.9", 1), encoding="utf-8")
+        entry.write_text(source.replace("Version: 3.1.0", "Version: 9.9.9", 1), encoding="utf-8")
         with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, "version"):
-            RELEASE_CHECK.validate_release(self.project, "3.0.1", self.output)
+            RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
 
     def test_rejects_env_path_without_opening_it(self) -> None:
         # Inject only the directory entry, so no .env file is ever opened,
@@ -72,34 +72,44 @@ class ReleaseCheckTests(unittest.TestCase):
 
         with patch.object(Path, "open", guarded_open), patch.object(os, "walk", walk_with_env):
             with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, r"\.env"):
-                RELEASE_CHECK.validate_release(self.project, "3.0.1", self.output)
+                RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
 
     def test_rejects_patch_tested_up_to_version(self) -> None:
         readme = self.project / "readme.txt"
         source = re.sub(r"(?m)^Tested up to:.*$", "Tested up to: 7.1.3", readme.read_text(encoding="utf-8"))
         readme.write_text(source, encoding="utf-8")
         with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, "Tested up to"):
-            RELEASE_CHECK.validate_release(self.project, "3.0.1", self.output)
+            RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
 
     def test_rejects_missing_production_file(self) -> None:
         (self.project / "uninstall.php").unlink()
         with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, "uninstall.php"):
-            RELEASE_CHECK.validate_release(self.project, "3.0.1", self.output)
+            RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
 
     def test_required_lifecycle_classes_are_packaged(self) -> None:
         self.assertTrue({"includes/class-lock.php", "includes/class-migration.php", "includes/class-user-cleanup.php"}.issubset(RELEASE_CHECK.PRODUCTION_FILES))
 
-    def test_zip_contains_only_the_fourteen_production_files(self) -> None:
-        for directory in (".github", "docs", "tests", "tools"):
+    def test_avatar_feature_runtime_files_are_packaged(self) -> None:
+        required = {
+            "assets/css/front-end.css", "assets/js/avatar-upload-editor.js",
+            "assets/js/import.js", "blocks/avatar-upload/block.json",
+            "includes/class-front-end.php", "includes/class-upload-policy.php",
+            "includes/class-image-processor.php", "includes/class-import-sources.php",
+            "includes/class-admin-import.php",
+        }
+        self.assertTrue(required.issubset(RELEASE_CHECK.PRODUCTION_FILES))
+
+    def test_zip_contains_only_the_twenty_three_production_files(self) -> None:
+        for directory in (".github", "docs", "tests", "tools", ".wordpress-org"):
             dev_file = self.project / directory / "release-note.txt"
             dev_file.parent.mkdir(parents=True, exist_ok=True)
             dev_file.write_text("development only", encoding="utf-8")
 
-        report = RELEASE_CHECK.validate_release(self.project, "3.0.1", self.output)
+        report = RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
         with zipfile.ZipFile(report.zip_path) as archive:
             members = tuple(sorted(archive.namelist()))
 
-        self.assertEqual(len(RELEASE_CHECK.PRODUCTION_FILES), 14)
+        self.assertEqual(len(RELEASE_CHECK.PRODUCTION_FILES), 23)
         self.assertTrue({"includes/class-lock.php", "includes/class-migration.php", "includes/class-user-cleanup.php"}.issubset(members))
         self.assertEqual(members, tuple(sorted(RELEASE_CHECK.PRODUCTION_FILES)))
         self.assertEqual(report.members, members)

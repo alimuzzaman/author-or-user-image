@@ -24,8 +24,9 @@ test.describe('competitor importer', () => {
     // Freeze after one batch by navigating away once persisted progress changes.
     let batches = 0;
     await page.route('**/wp-admin/admin-post.php', async route => {
-      const body = new URLSearchParams(route.request().postData() || '');
-      if (body.get('action') === 'zmai_import_batch' && ++batches > 1) {
+      const body = route.request().postData() || '';
+      const action = /name="action"\r\n\r\n([^\r\n]+)/.exec(body)?.[1] || new URLSearchParams(body).get('action');
+      if (action === 'zmai_import_batch' && ++batches > 1) {
         await route.abort(); return;
       }
       await route.continue();
@@ -46,7 +47,7 @@ test.describe('competitor importer', () => {
     await expect(page.locator('[data-zmai-count="failed"]')).toHaveText('0');
     await page.goto(data.frontUrl);
     const image = page.locator(data.avatarSelector).first();
-    await expect(image).toHaveAttribute('src', /zmai-import-/);
+    await expect(image).toHaveAttribute('src', /\/zmai-avatar-[a-f0-9]+\.png$/);
     const rgb = await image.evaluate(async img => {
       await img.decode();
       const canvas = document.createElement('canvas'); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;

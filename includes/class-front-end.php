@@ -61,7 +61,7 @@ final class Front_End {
 	public function prevent_cache() {
 		if ( is_user_logged_in() ) {
 			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-				define( 'DONOTCACHEPAGE', true );
+				define( 'DONOTCACHEPAGE', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- This is the established page-cache interoperability constant.
 			}
 			if ( ! headers_sent() ) {
 				nocache_headers();

@@ -1,17 +1,17 @@
 <?php
 /**
  * CLI-only importer browser fixture. Prepare/cleanup with eval-file arguments:
- * prepare|cleanup /absolute/scratch/2b/import-browser.json
+ * prepare|cleanup /absolute/scratch/3/import-browser.json
  * The integrator owns the browser and must serialize this fixture with its run.
  */
 use AuthorOrUserImage\Image_Store;
 require __DIR__ . '/import-fixtures.php';
 $mode = $args[0] ?? '';
 $output = $args[1] ?? '';
-$root = realpath( '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/2b' );
+$root = realpath( '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/3' );
 $parent_dir = realpath( dirname( $output ) );
 if ( ! $root || ! $parent_dir || ( $root !== $parent_dir && 0 !== strpos( $parent_dir, $root . DIRECTORY_SEPARATOR ) ) || ! in_array( $mode, array( 'prepare', 'cleanup' ), true ) ) {
-	throw new RuntimeException( 'Use prepare|cleanup and a JSON file inside the importer scratch directory.' );
+	throw new RuntimeException( 'Use prepare|cleanup and a JSON file inside the Phase 3 scratch directory.' );
 }
 wp_set_current_user( 1 );
 if ( 'cleanup' === $mode ) {

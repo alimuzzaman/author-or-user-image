@@ -29,9 +29,18 @@ class ReleaseReport:
 PRODUCTION_FILES: tuple[str, ...] = (
     "LICENSE.txt",
     "assets/css/admin.css",
+    "assets/css/front-end.css",
     "assets/js/admin.js",
+    "assets/js/avatar-upload-editor.js",
+    "assets/js/import.js",
+    "blocks/avatar-upload/block.json",
     "author_image.php",
     "includes/class-admin.php",
+    "includes/class-admin-import.php",
+    "includes/class-front-end.php",
+    "includes/class-image-processor.php",
+    "includes/class-import-sources.php",
+    "includes/class-upload-policy.php",
     "includes/class-image-store.php",
     "includes/class-lock.php",
     "includes/class-migration.php",
@@ -78,7 +87,7 @@ TESTED_UP_TO = "7.1"
 def validate_tag(tag: str) -> str:
     """Validate and return a bare three-part semantic version tag."""
     if VERSION_PATTERN.fullmatch(tag) is None:
-        raise ReleaseCheckError(f"tag must be a bare semantic version such as 3.0.1, got {tag!r}")
+        raise ReleaseCheckError(f"tag must be a bare semantic version such as 3.1.0, got {tag!r}")
     return tag
 
 

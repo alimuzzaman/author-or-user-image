@@ -151,3 +151,26 @@ upload attempt. Test-only resets separate synthetic scenarios; they do not
 change or disable production rate limits. Neither harness proves real login or
 the phase 2 front-end forms. See [shared contracts](../docs/phase1-contracts.md)
 for the APIs the two feature worktrees can use.
+
+The integrated 3.1 suites also include `front-end.php` on single-site, and
+`integration.php` on single-site and multisite. The latter checks the actual
+entry loader, block/shortcode registration and admin-post hooks. Run it once in
+normal WP-CLI context and once with a scratch pre-bootstrap file containing
+`<?php define( 'WP_ADMIN', true );`, supplied with `--require` before the
+candidate bootstrap. It must report 9 public checks and 16 admin checks.
+
+Run `import-sources.php`, `import-progress.php`, `import-race.php`,
+`import-admin.php` and `import-recovery.php` on both backends and site modes.
+Run `import-multisite.php` only on multisite. Its source-prefix, membership and
+colliding attachment-ID cases require actual separate blogs. Run
+`import-concurrency.py --site <site> --plugin <plugin> --php <php>` separately
+for the independent coordinator/owner workers. Importer worker and browser
+fixture state must stay inside the Phase 3 scratch root, as checked by those
+harnesses. A silent exit or an unavailable `MISSING` cell is not a passing test.
+
+Run all real-login browser suites and the screenshot gallery as described in
+[e2e/README.md](e2e/README.md), with the importer fixture explicitly prepared.
+JSON-based runners require warning-free PHP startup. On hosts where PHP 7.4
+cannot allocate PCRE JIT memory, use a scratch executable wrapper that passes
+`-d pcre.jit=0` to the real PHP binary, including nested workers and servers.
+Do not strip warnings from JSON responses to turn a failed check into a pass.

@@ -1,6 +1,7 @@
 const { test } = require('@playwright/test');
-const {expect, artifacts, fixture, avatarPage, managePage, login, upload, remove, front, expectAvatar} = require('./helpers');
+const {resetUploadRates, expect, artifacts, fixture, avatarPage, managePage, login, upload, remove, front, expectAvatar} = require('./helpers');
 test.beforeEach(async ({page}) => {
+  resetUploadRates();
   await page.route(/https?:\/\/([^/]*\.)?gravatar\.com\//, route => route.abort());
 });
 const fs = require('node:fs');
@@ -49,7 +50,7 @@ test('invalid file type shows an error and preserves the existing avatar', async
   const original = await upload(page);
   await page.locator('#user_avatar').setInputFiles({name:'invalid.txt',mimeType:'text/plain',buffer:Buffer.from('This is not an image.')});
   await page.locator('#user_avatar').locator('..').getByRole('button',{name:'Upload image',exact:true}).click();
-  await expect(page.locator('.notice-error')).toContainText('Choose a valid image file.');
+  await expect(page.locator('.notice-error')).toContainText('Choose a JPEG, PNG, or static WebP image.');
   await expect(page.locator('.zmai-avatar-preview')).toHaveAttribute('src',original);
 });
 
@@ -67,13 +68,13 @@ test('image over 8 MiB shows the upload-limit error and preserves avatar', async
 
 test('admin blocks uploads, removes avatar, then unblocks the subscriber', async ({page}) => {
   await login(page);
-  await upload(page);
+  const uploadedURL = await upload(page);
   const nonce = await page.locator('input[name="_wpnonce"]').first().inputValue();
   const subscriberState = await page.context().storageState();
   await login(page,'admin');
   await page.goto(managePage);
   const row = page.getByRole('row').filter({hasText:'Maya Chen'});
-  await expect(row.locator('img')).toHaveAttribute('src',/maya/);
+  await expect(row.locator('img')).toHaveAttribute('src',uploadedURL);
   await row.getByRole('checkbox').check();
   await page.locator('#zmai-bulk-action').selectOption('block');
   page.once('dialog',dialog=>dialog.accept());
@@ -151,7 +152,7 @@ test('missing or invalid nonces reject upload, remove, management and settings',
     for (const nonce of ['', 'invalid-e2e-nonce']) {
       const response = await page.request.post('/wp-admin/admin-post.php',{form:{action,_wpnonce:nonce,avatar_type:'user',avatar_size:'1024',user_action:'block','user_ids[]':String(fixture.subscriberId)}});
       expect(response.status(),`${action} ${nonce || 'missing'}`).toBe(403);
-      expect(await response.text()).toContain('link you followed has expired');
+      expect(await response.text()).toContain(action === 'zmai_save_avatar' || action === 'zmai_remove_avatar' ? 'The security check failed.' : 'link you followed has expired');
     }
   }
   await page.goto(avatarPage);

@@ -1,6 +1,8 @@
 const { expect } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
+const {execFileSync} = require('node:child_process');
+const uploadedURLs = new Map();
 const artifacts = process.env.E2E_ARTIFACT_DIR;
 if (!artifacts) throw new Error('Set E2E_ARTIFACT_DIR. See README.md.');
 const fixture = JSON.parse(fs.readFileSync(path.join(artifacts, 'fixture.json')));
@@ -30,7 +32,9 @@ async function upload(page, name = 'maya', field = 'user_avatar') {
   const image = card.locator('.zmai-avatar-preview');
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
-  return image.getAttribute('src');
+  const url = await image.getAttribute('src');
+  uploadedURLs.set(name, url);
+  return url;
 }
 async function remove(page, type = 'user') {
   const form = page.locator('form').filter({has:page.locator(`input[name="avatar_type"][value="${type}"]`)}).filter({has:page.getByRole('button',{name:'Remove image',exact:true})});
@@ -40,9 +44,18 @@ async function remove(page, type = 'user') {
 async function front(page) { await page.goto(`/?p=${fixture.postId}`); }
 async function expectAvatar(page, selector, filename) {
   const img = page.locator(selector).first();
-  await expect(img).toHaveAttribute('src', new RegExp(filename));
+  const expectedURL = uploadedURLs.get(filename);
+  expect(expectedURL, `upload URL for ${filename}`).toBeTruthy();
+  await expect(img).toHaveAttribute('src', expectedURL);
   await img.scrollIntoViewIfNeeded();
   await expect(img).toBeVisible();
   await expect.poll(() => img.evaluate(el => el.complete && el.naturalWidth > 0)).toBe(true);
 }
-module.exports = {expect, artifacts, fixture, avatarPage, managePage, login, upload, remove, front, expectAvatar};
+function resetUploadRates() {
+  const ids = [fixture.subscriberId, fixture.admin?.id].filter(Number.isInteger);
+  execFileSync(process.env.E2E_PHP || '/Users/alim/Library/Application Support/Herd/bin/php85', [
+    '/usr/local/bin/wp', `--path=${process.env.E2E_WP_PATH}`, 'eval',
+    `$ids=json_decode('${JSON.stringify(ids)}',true);foreach($ids as $id){delete_user_meta($id,AuthorOrUserImage\\Image_Store::user_meta_key(AuthorOrUserImage\\Image_Store::UPLOAD_RATE_META));}`
+  ], {encoding:'utf8'});
+}
+module.exports = {resetUploadRates, expect, artifacts, fixture, avatarPage, managePage, login, upload, remove, front, expectAvatar};

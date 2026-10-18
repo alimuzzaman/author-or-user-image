@@ -238,7 +238,7 @@ try {
 	if ( is_multisite() ) {
 		import_sources_expect_file( import_sources_resolve_unchanged( 'simple-local-avatars', 'SLA nonshared resolution' ), $source_sla_full_path, 'nonshared SLA reads the current-blog suffixed key and local full URL' );
 	} else {
-		echo "MISSING multisite-only SLA nonshared-key case\n";
+		echo "INFO multisite-only SLA nonshared-key case runs in the multisite matrix\n";
 	}
 	$source_sla_settings = array( 'shared' => 1 );
 	update_option( 'simple_local_avatars', $source_sla_settings, false );

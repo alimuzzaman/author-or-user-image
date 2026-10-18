@@ -32,7 +32,7 @@
 		working = true;
 		stopRequested = false;
 		var fields = new FormData(form);
-		var url = form.action;
+		var url = form.getAttribute('action');
 		root.querySelectorAll('button, select').forEach(function (control) { control.disabled = true; });
 		stopButton = document.createElement('button');
 		stopButton.type = 'button';

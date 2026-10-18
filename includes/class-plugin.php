@@ -85,6 +85,7 @@ final class Plugin {
 
 		if ( is_admin() ) {
 			new Admin( $this->store );
+			( new Import_Admin( $this->migration ) )->register();
 			add_action( 'admin_init', array( $this, 'maybe_migrate' ) );
 			add_action( 'admin_notices', array( $this->migration, 'migration_notice' ) );
 		}

@@ -40,6 +40,7 @@ async function fields(page, kind = 'save') {
 async function post(page, values) {
   return page.request.post('/wp-admin/admin-post.php', { form: values, maxRedirects: 0 });
 }
+test.use({ javaScriptEnabled: false });
 test.describe.configure({ mode: 'serial' });
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());

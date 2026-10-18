@@ -1,11 +1,13 @@
 const {test} = require('@playwright/test');
-const {expect,avatarPage,managePage,login,upload,front,expectAvatar} = require('./helpers');
+const {resetUploadRates,expect,avatarPage,managePage,login,upload,front,expectAvatar} = require('./helpers');
 test.beforeEach(async ({page}) => {
+  resetUploadRates();
   await page.route(/https?:\/\/([^/]*\.)?gravatar\.com\//, route => route.abort());
 });
 const fs = require('node:fs');
 const path = require('node:path');
-const destination = path.resolve(__dirname,'../../.wordpress-org');
+const destination = process.env.E2E_SCREENSHOT_DIR;
+if (!destination || !path.isAbsolute(destination)) throw new Error('Set E2E_SCREENSHOT_DIR to an absolute scratch gallery directory.');
 async function capture(page,number) {
   await page.mouse.move(1270,890);
   await page.evaluate(()=>document.fonts.ready);
@@ -38,4 +40,15 @@ test('@screenshots clean WordPress.org gallery',async({page})=>{
   await page.goto(avatarPage);
   await expect(page.getByRole('heading',{name:'Site default avatar',exact:true})).toBeVisible();
   await capture(page,5);
+  const formFixture = JSON.parse(fs.readFileSync(path.join(process.env.E2E_ARTIFACT_DIR,'front-fixture.json'),'utf8'));
+  await login(page);
+  await page.goto(`/?p=${formFixture.post}`);
+  await expect(page.locator('.zmai-front-end input[type=file]')).toBeVisible();
+  await page.locator('.zmai-front-end').scrollIntoViewIfNeeded();
+  await capture(page,6);
+  await login(page,'admin');
+  await page.goto('/wp-admin/users.php?page=author-or-user-image-import');
+  await expect(page.getByRole('heading',{name:'Import avatars',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Source plugin')).toBeVisible();
+  await capture(page,7);
 });

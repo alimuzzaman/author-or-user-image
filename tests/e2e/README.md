@@ -31,6 +31,7 @@ export E2E_WP_PATH=/Users/alim/Sites/git/.scratch/author-or-user-image/security-
 export E2E_ARTIFACT_DIR=/Users/alim/Sites/git/.scratch/author-or-user-image/security-oct18/e2e-artifacts
 export PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright"
 npm run test:local
+export E2E_SCREENSHOT_DIR="$E2E_ARTIFACT_DIR/gallery"
 npm run screenshots:local
 ```
 
@@ -47,8 +48,9 @@ startup fails explicitly if the chosen port becomes unavailable.
 JSON results, failure PNGs and traces go outside the repository under
 `E2E_ARTIFACT_DIR`. Traces contain disposable fixture login data. Run captures
 one at a time; screenshot execution overwrites `results.json`, so archive the
-functional run's report first. The screenshot test creates only
-`.wordpress-org/screenshot-1.png` through `screenshot-5.png`.
+functional run's report first. Set `E2E_SCREENSHOT_DIR` to an absolute directory under the shared scratch root.
+The screenshot test writes seven PNGs there. Inspect them before copying final
+`screenshot-1.png` through `screenshot-7.png` to `.wordpress-org/`.
 
 ## Existing server or fixed candidate
 
@@ -94,3 +96,14 @@ records the public prior home/site URLs before mutation; restore those with
 WP-CLI if needed. Normal success/failure and handled signals stop PHP and
 restore both URLs independently. Browser workers may require separate shutdown
 after abrupt cancellation; verify the runner's loopback port is closed.
+
+The combined 3.1 run also needs `front-fixture.json` in the artifact directory
+with numeric `user`, `post`, `page` and a synthetic `login`. Create the post with
+the dynamic upload block and the page with two upload shortcodes using local
+WP-CLI. Set `E2E_IMPORT_FIXTURE_JSON` to the JSON produced by
+`tests/import-e2e-fixture.php prepare <absolute-phase3-scratch-path>`. Prepare
+after assigning the loopback home/site URLs so its front URL uses that server.
+Run all specs with one worker, then use the matching `cleanup` fixture action
+before restoring URLs. An importer spec skipped for missing fixture data does
+not satisfy the combined gate. The front-end native-form cases disable JS; the
+editor and importer progressive-enhancement cases enable it.

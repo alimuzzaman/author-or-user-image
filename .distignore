@@ -1,3 +1,4 @@
+# Keep blocks/ and all runtime assets in the release; exclude development and gallery sources.
 /.git
 /.github
 /.gitignore
