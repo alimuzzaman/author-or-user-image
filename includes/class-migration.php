@@ -86,6 +86,342 @@ final class Migration {
 		return $result;
 	}
 
+	/** Site-local nonautoloaded competitor progress, separate from legacy cursors. */
+	const IMPORT_JOB_OPTION = 'zmai_import_job';
+
+	/**
+	 * Authoritative aggregate status. Reading never starts or advances a job.
+	 *
+	 * @return array|null|WP_Error
+	 */
+	public function import_status() {
+		global $wpdb;
+		try {
+			$signals = $this->store->database_values( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, self::RELEASE_FAILED_OPTION ) );
+			if ( $signals ) {
+				return $this->import_error( 'recovery' );
+			}
+			$rows = $this->store->database_values( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, self::IMPORT_JOB_OPTION ) );
+			if ( ! $rows ) {
+				return null;
+			}
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize,WordPress.PHP.NoSilencedErrors.Discouraged -- Job data must never instantiate stored PHP objects.
+			$job = 1 === count( $rows ) && is_serialized( $rows[0] ) ? @unserialize( $rows[0], array( 'allowed_classes' => false ) ) : null;
+			return $this->valid_import_job( $job ) ? $job : $this->import_error( 'schema' );
+		} catch ( \Throwable $error ) {
+			return $this->store->storage_error();
+		}
+	}
+
+	/**
+	 * Begin an explicit source run. Its UUID is a single-use replay token.
+	 *
+	 * @param string $source Allowlisted source.
+	 * @param string $token UUID from the Start form.
+	 * @param int    $revision Expected current job revision, zero when absent.
+	 * @return array|WP_Error
+	 */
+	public function start_import( $source, $token, $revision ) {
+		if ( ! is_string( $source ) || ! isset( Import_Sources::registry()[ $source ] ) || ! $this->import_uuid( $token ) || ! is_int( $revision ) || $revision < 0 ) {
+			return $this->import_error( 'request' );
+		}
+		return $this->with_migration_lock(
+			function () use ( $source, $token, $revision ) {
+				$job = $this->import_status();
+				if ( is_wp_error( $job ) ) {
+					return $job;
+				}
+				if ( $job && $token === $job['id'] ) {
+					return $job;
+				}
+				if ( ( $job ? $job['revision'] : 0 ) !== $revision ) {
+					return $job ? $job : $this->import_error( 'request' );
+				}
+				if ( $job && 'complete' !== $job['state'] ) {
+					return $this->import_error( 'active' );
+				}
+				if ( $this->store->read_value( 0, '', self::RELEASE_FAILED_OPTION ) ) {
+					return $this->import_error( 'recovery' );
+				}
+				$ids = $this->import_user_ids( 0, PHP_INT_MAX, true );
+				$job = array(
+					'schema'          => 1,
+					'id'              => $token,
+					'source'          => $source,
+					'site_id'         => get_current_blog_id(),
+					'state'           => 'running',
+					'last_user_id'    => 0,
+					'upper_user_id'   => $ids ? (int) $ids[0] : 0,
+					'sweep'           => 1,
+					'revision'        => $revision + 1,
+					'retry_needed'    => false,
+					'counts'          => $this->import_counts(),
+					'last_error_code' => '',
+				);
+				return $this->save_import_job( $job );
+			}
+		);
+	}
+
+	/**
+	 * Advance one explicit bounded page, serialized with legacy migration.
+	 *
+	 * @param string $id Job UUID.
+	 * @param int    $revision Expected revision.
+	 * @return array|WP_Error
+	 */
+	public function run_import_batch( $id, $revision ) {
+		return $this->mutate_import(
+			$id,
+			$revision,
+			function ( $job ) {
+				if ( 'running' !== $job['state'] ) {
+					return $job;
+				}
+				$started = microtime( true );
+				$users   = $this->import_user_ids( $job['last_user_id'], $job['upper_user_id'] );
+				$sources = new Import_Sources( $this->store );
+				$visited = 0;
+				foreach ( $users as $user_id ) {
+					if ( $visited && microtime( true ) - $started >= 5 ) {
+						break;
+					}
+					$result = $this->store->import_local_image( $sources->resolver( $job['source'], (int) $user_id ), (int) $user_id );
+					++$visited;
+					++$job['counts']['inspected'];
+					if ( is_wp_error( $result ) ) {
+						$code = $result->get_error_code();
+						if ( in_array( $code, array( 'zmai_import_no_source', 'zmai_import_other_site' ), true ) ) {
+							++$job['counts'][ 'zmai_import_no_source' === $code ? 'no_source' : 'other_site' ];
+						} else {
+							++$job['counts']['failed'];
+							$job['retry_needed']    = true;
+							$job['last_error_code'] = 'zmai_busy' === $code ? 'busy' : 'import_failed';
+							$data                   = $result->get_error_data();
+							if ( is_array( $data ) && ! empty( $data['recovery'] ) ) {
+								$job['state']           = 'recovery_required';
+								$job['last_error_code'] = 'recovery';
+								break;
+							}
+						}
+					} else {
+						$keys = array(
+							'imported'        => 'imported',
+							'already_present' => 'existing',
+							'explicit_choice' => 'suppressed',
+							'blocked'         => 'blocked',
+							'gone'            => 'suppressed',
+						);
+						if ( ! is_array( $result ) || ! isset( $result['status'], $keys[ $result['status'] ] ) ) {
+							return $this->store->storage_error( true );
+						}
+						++$job['counts'][ $keys[ $result['status'] ] ];
+					}
+					$job['last_user_id'] = (int) $user_id;
+				}
+				if ( 'running' === $job['state'] && ( ! $users || ( count( $users ) === $visited && count( $users ) < 20 ) || $job['last_user_id'] === $job['upper_user_id'] ) ) {
+					$job['state'] = $job['retry_needed'] ? 'paused_with_failures' : 'complete';
+					if ( 'complete' === $job['state'] ) {
+						$job['last_error_code'] = '';
+						$job['last_user_id']    = 0;
+						$job['upper_user_id']   = 0;
+					}
+				}
+				++$job['revision'];
+				return $this->save_import_job( $job );
+			}
+		);
+	}
+
+	/**
+	 * Pause without changing any owner, source or fence.
+	 *
+	 * @param string $id Job UUID.
+	 * @param int    $revision Expected revision.
+	 * @return array|WP_Error
+	 */
+	public function pause_import( $id, $revision ) {
+		return $this->change_import_state( $id, $revision, 'pause' );
+	}
+
+	/**
+	 * Resume the same site, source and upper bound.
+	 *
+	 * @param string $id Job UUID.
+	 * @param int    $revision Expected revision.
+	 * @return array|WP_Error
+	 */
+	public function resume_import( $id, $revision ) {
+		return $this->change_import_state( $id, $revision, 'resume' );
+	}
+
+	/**
+	 * Explicitly retry a repaired failed sweep with aggregate counts reset.
+	 *
+	 * @param string $id Job UUID.
+	 * @param int    $revision Expected revision.
+	 * @return array|WP_Error
+	 */
+	public function retry_import( $id, $revision ) {
+		return $this->change_import_state( $id, $revision, 'retry' );
+	}
+
+	/**
+	 * Implement fixed transitions. A recovery state requires operator reconciliation.
+	 *
+	 * @param string $id Job UUID.
+	 * @param int    $revision Expected revision.
+	 * @param string $operation Internal transition name.
+	 * @return array|WP_Error
+	 */
+	private function change_import_state( $id, $revision, $operation ) {
+		return $this->mutate_import(
+			$id,
+			$revision,
+			function ( $job ) use ( $operation ) {
+				if ( 'pause' === $operation && 'running' === $job['state'] ) {
+					$job['state'] = 'paused';
+				} elseif ( 'resume' === $operation && 'paused' === $job['state'] ) {
+					$job['state'] = 'running';
+				} elseif ( 'retry' === $operation && 'paused_with_failures' === $job['state'] ) {
+					$job['state']           = 'running';
+					$job['last_user_id']    = 0;
+					$job['counts']          = $this->import_counts();
+					$job['retry_needed']    = false;
+					$job['last_error_code'] = '';
+					++$job['sweep'];
+				} else {
+					return $job;
+				}
+				++$job['revision'];
+				return $this->save_import_job( $job );
+			}
+		);
+	}
+
+	/**
+	 * Validate identity/revision under the shared coordinator fence before mutation.
+	 *
+	 * @param string   $id Job UUID.
+	 * @param int      $revision Expected revision.
+	 * @param callable $callback Validated transition.
+	 * @return array|WP_Error
+	 */
+	private function mutate_import( $id, $revision, $callback ) {
+		if ( ! $this->import_uuid( $id ) || ! is_int( $revision ) || $revision < 1 ) {
+			return $this->import_error( 'request' );
+		}
+		return $this->with_migration_lock(
+			function () use ( $id, $revision, $callback ) {
+				$job = $this->import_status();
+				if ( is_wp_error( $job ) ) {
+					return $job;
+				}
+				if ( ! $job || $id !== $job['id'] ) {
+					return $this->import_error( 'request' );
+				}
+				if ( $this->store->read_value( 0, '', self::RELEASE_FAILED_OPTION ) ) {
+					return $this->import_error( 'recovery' );
+				}
+				return $revision === $job['revision'] ? call_user_func( $callback, $job ) : $job;
+			}
+		);
+	}
+
+	/**
+	 * Keyset pagination over current-site members, using the actual blog prefix.
+	 *
+	 * @param int  $last Lower exclusive ID.
+	 * @param int  $upper Upper inclusive ID.
+	 * @param bool $maximum Whether to snapshot the maximum member ID only.
+	 * @return array
+	 */
+	private function import_user_ids( $last, $upper, $maximum = false ) {
+		global $wpdb;
+		if ( is_multisite() ) {
+			return $this->store->database_values(
+				$maximum
+					? $wpdb->prepare( 'SELECT MAX(u.ID) FROM %i u WHERE EXISTS (SELECT 1 FROM %i m WHERE m.user_id = u.ID AND m.meta_key = %s)', $wpdb->users, $wpdb->usermeta, $wpdb->get_blog_prefix() . 'capabilities' )
+					: $wpdb->prepare( 'SELECT u.ID FROM %i u WHERE u.ID > %d AND u.ID <= %d AND EXISTS (SELECT 1 FROM %i m WHERE m.user_id = u.ID AND m.meta_key = %s) ORDER BY u.ID ASC LIMIT 20', $wpdb->users, $last, $upper, $wpdb->usermeta, $wpdb->get_blog_prefix() . 'capabilities' )
+			);
+		}
+		return $this->store->database_values(
+			$maximum
+				? $wpdb->prepare( 'SELECT MAX(ID) FROM %i', $wpdb->users )
+				: $wpdb->prepare( 'SELECT ID FROM %i WHERE ID > %d AND ID <= %d ORDER BY ID ASC LIMIT 20', $wpdb->users, $last, $upper )
+		);
+	}
+
+	/**
+	 * Fixed sweep counts contain no owner identifiers.
+	 *
+	 * @return array<string,int>
+	 */
+	private function import_counts() {
+		return array_fill_keys( array( 'inspected', 'imported', 'existing', 'suppressed', 'blocked', 'no_source', 'other_site', 'failed' ), 0 );
+	}
+
+	/**
+	 * Check a fully typed versioned job before acting on it.
+	 *
+	 * @param mixed $job Stored job.
+	 * @return bool
+	 */
+	private function valid_import_job( $job ) {
+		$keys = array( 'schema', 'id', 'source', 'site_id', 'state', 'last_user_id', 'upper_user_id', 'sweep', 'revision', 'retry_needed', 'counts', 'last_error_code' );
+		if ( ! is_array( $job ) || count( $job ) !== count( $keys ) || array_diff( $keys, array_keys( $job ) ) ) {
+			return false;
+		}
+		if ( 1 !== $job['schema'] || ! $this->import_uuid( $job['id'] ) || ! is_string( $job['source'] ) || ! isset( Import_Sources::registry()[ $job['source'] ] ) || get_current_blog_id() !== $job['site_id'] || ! in_array( $job['state'], array( 'running', 'paused', 'paused_with_failures', 'recovery_required', 'complete' ), true ) || ! is_bool( $job['retry_needed'] ) || ! in_array( $job['last_error_code'], array( '', 'busy', 'import_failed', 'recovery' ), true ) ) {
+			return false;
+		}
+		foreach ( array( 'last_user_id', 'upper_user_id', 'sweep', 'revision' ) as $key ) {
+			if ( ! is_int( $job[ $key ] ) || $job[ $key ] < ( in_array( $key, array( 'sweep', 'revision' ), true ) ? 1 : 0 ) ) {
+				return false;
+			}
+		}
+		if ( $job['last_user_id'] > $job['upper_user_id'] || ! is_array( $job['counts'] ) || array_keys( $this->import_counts() ) !== array_keys( $job['counts'] ) ) {
+			return false;
+		}
+		foreach ( $job['counts'] as $count ) {
+			if ( ! is_int( $count ) || $count < 0 ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Exact request UUID, not an arbitrary string used in nonce/action names.
+	 *
+	 * @param mixed $id UUID.
+	 * @return bool
+	 */
+	private function import_uuid( $id ) {
+		return is_string( $id ) && 1 === preg_match( '/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/D', $id );
+	}
+
+	/**
+	 * Confirm persistence before advertising a new cursor or completion.
+	 *
+	 * @param array $job Next status.
+	 * @return array|WP_Error
+	 */
+	private function save_import_job( $job ) {
+		$result = $this->store->write_value( 0, '', self::IMPORT_JOB_OPTION, $job );
+		return is_wp_error( $result ) ? $result : $job;
+	}
+
+	/**
+	 * Fixed job error without source paths, URLs or owner details.
+	 *
+	 * @param string $code Internal failure category.
+	 * @return WP_Error
+	 */
+	private function import_error( $code ) {
+		return new WP_Error( 'zmai_import_' . $code, __( 'The import cannot continue in its current state. Reload the import page. If recovery is required, ask the administrator to reconcile the retained locks before retrying.', 'author-or-user-image' ) );
+	}
+
 	/**
 	 * Show a persistent recovery notice only to site administrators.
 	 *
