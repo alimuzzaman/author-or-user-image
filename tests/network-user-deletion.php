@@ -129,6 +129,7 @@ $created_site_ids     = array();
 $site_ids             = array( $initial_site_id );
 $site_fixtures        = array();
 $probe_results        = array();
+$rate_probe_results   = array();
 $probe                 = null;
 $legacy_directory     = WP_CONTENT_DIR . '/uploads/author-image';
 $legacy_path          = $legacy_directory . '/' . $prefix . '.jpg';
@@ -205,6 +206,7 @@ try {
 		try {
 			$site_store = new Image_Store();
 			$site_store->register_image_size();
+			update_user_meta( $subject_id, Image_Store::user_meta_key( Image_Store::UPLOAD_RATE_META ), array( 'minute_start' => time(), 'minute_count' => 1, 'hour_start' => time(), 'hour_count' => 1 ) );
 			$default_before = array(
 				Image_Store::DEFAULT_OPTION          => $zmai_netdel_option_snapshot( Image_Store::DEFAULT_OPTION ),
 				Image_Store::MIGRATED_DEFAULT_OPTION => $zmai_netdel_option_snapshot( Image_Store::MIGRATED_DEFAULT_OPTION ),
@@ -252,7 +254,7 @@ try {
 	} ) );
 	$zmai_netdel_expect( 2 === $fixture_after_first_page, 'both newly created sites are beyond the first 100-site page' );
 
-	$probe = static function ( $deleted_id ) use ( $subject_id, $site_ids, &$probe_results ) {
+	$probe = static function ( $deleted_id ) use ( $subject_id, $site_ids, &$probe_results, &$rate_probe_results ) {
 		if ( (int) $deleted_id !== (int) $subject_id ) {
 			return;
 		}
@@ -263,6 +265,7 @@ try {
 				$acquire = new ReflectionMethod( AuthorOrUserImage\Lock::class, 'acquire_lock' );
 				if ( PHP_VERSION_ID < 80100 ) { $acquire->setAccessible( true ); }
 				$lock = $acquire->invoke( $store->get_lock(), 'zmai_avatar_lock_user_' . $subject_id );
+				$rate_probe_results[ $site_id ] = ! metadata_exists( 'user', $subject_id, Image_Store::user_meta_key( Image_Store::UPLOAD_RATE_META ) );
 				$probe_results[ $site_id ] = is_wp_error( $lock ) && 'zmai_busy' === $lock->get_error_code();
 				if ( is_array( $lock ) ) {
 					$release = new ReflectionMethod( AuthorOrUserImage\Lock::class, 'release_lock' );
@@ -281,6 +284,7 @@ try {
 	$zmai_netdel_expect( true === $delete_result && ! get_userdata( $subject_id ), 'actual wpmu_delete_user removes the subject account' );
 	foreach ( $site_ids as $site_id ) {
 		$zmai_netdel_expect( ! empty( $probe_results[ $site_id ] ), 'site ' . $site_id . ' owner fence rejects mutation during wpmu_delete_user' );
+		$zmai_netdel_expect( ! empty( $rate_probe_results[ $site_id ] ), 'site ' . $site_id . ' rate counter is erased before core usermeta deletion' );
 	}
 	$remaining_user_meta = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $wpdb->usermeta WHERE user_id = %d", $subject_id ) );
 	$zmai_netdel_expect( 0 === $remaining_user_meta, 'network deletion removes the subject user metadata rows' );

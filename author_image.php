@@ -23,6 +23,8 @@ define( 'ZMAI_PATH', plugin_dir_path( __FILE__ ) );
 define( 'ZMAI_URL', plugin_dir_url( __FILE__ ) );
 
 require_once ZMAI_PATH . 'includes/class-lock.php';
+require_once ZMAI_PATH . 'includes/class-upload-policy.php';
+require_once ZMAI_PATH . 'includes/class-image-processor.php';
 require_once ZMAI_PATH . 'includes/class-image-store.php';
 require_once ZMAI_PATH . 'includes/class-migration.php';
 require_once ZMAI_PATH . 'includes/class-user-cleanup.php';

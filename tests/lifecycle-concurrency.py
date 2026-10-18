@@ -24,7 +24,7 @@ if not (args.site / '.zmai-test-instance').is_file():
 args.state.mkdir(parents=True, exist_ok=False)
 fixture = 'zmailifecycle' + uuid.uuid4().hex[:12]
 router = Path(__file__).with_name('lifecycle-router.php').resolve()
-png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVioAAAAASUVORK5CYII=')
+png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=')
 checks, servers = [], []
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
@@ -139,6 +139,8 @@ try:
         check(final['mapped'] != previous and set(final['owned']) == {final['mapped']}, label + ': replacement ignores another worker stale metadata/option cache', final)
         remove(a, default)
         check(request(a, 'snapshot', default=int(default))['owned'] == [], label + ': removal reclaims all exact-owner images')
+    # Distinct removal scenario starts with a fresh synthetic upload budget.
+    request(a, 'reset-rate-fixture')
     # Reverse race: removal owns the mutex before a user/default upload starts.
     for default in (False, True):
         label = 'default' if default else 'user'
@@ -154,6 +156,19 @@ try:
         check(success(pending.result(timeout=30), 'removed') and not request(b, 'exists', id=old)['exists'] and not Path(deleting['file']).is_file(), label + ': completed removal deletes the original row and file')
         check(success(upload(b, default), 'uploaded') and len(request(b, 'snapshot', default=int(default))['owned']) == 1, label + ': serial upload succeeds after removal releases the mutex')
         remove(a, default)
+    # Independent workers contend on the final available upload attempt.
+    request(a, 'prime-rate-fixture')
+    name = 'userrate'
+    pending = executor.submit(upload, a, False, pause='media', barrier=name)
+    arrival(name)
+    denied = upload(b)
+    check(busy(denied), 'rate: another worker cannot pass the locked fifth attempt', denied)
+    release(name)
+    check(success(pending.result(timeout=30), 'uploaded'), 'rate: fifth attempt completes in the first worker')
+    denied = upload(b)
+    snap = request(b, 'snapshot')
+    check(busy(denied) and snap['rate']['minute_count'] == 5 and len(snap['owned']) == 1, 'rate: retry is throttled with one owned image and bounded counter', snap)
+    remove(a)
     own = request(a, 'seed')
     foreign = request(a, 'seed', foreign=1, map=1)
     erased = request(a, 'erase', page=2)
@@ -167,7 +182,7 @@ try:
 except Exception as error:
     check(False, 'harness completed without exception', str(error))
 finally:
-    for name in ('usermedia', 'defaultmedia', 'usercache', 'defaultcache', 'userdelete', 'defaultdelete'):
+    for name in ('usermedia', 'defaultmedia', 'usercache', 'defaultcache', 'userdelete', 'defaultdelete', 'userrate'):
         release(name)
     executor.shutdown(wait=True)
     for process, log in servers:

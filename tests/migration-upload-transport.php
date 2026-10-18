@@ -6,5 +6,11 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'local' !== wp_get_environment_type() 
 }
 /** Send the CLI fixture through real core sideload instead of is_uploaded_file(). */
 function media_handle_upload( $field, $post_id, $post_data, $overrides ) {
-	return \media_handle_sideload( $_FILES[ $field ], $post_id, null, $post_data );
+	$file = $_FILES[ $field ];
+	if ( isset( $overrides['unique_filename_callback'] ) ) {
+		$extension = '.' . pathinfo( $file['name'], PATHINFO_EXTENSION );
+		$uploads = wp_upload_dir();
+		$file['name'] = call_user_func( $overrides['unique_filename_callback'], $uploads['path'], pathinfo( $file['name'], PATHINFO_FILENAME ), $extension );
+	}
+	return \media_handle_sideload( $file, $post_id, null, $post_data );
 }

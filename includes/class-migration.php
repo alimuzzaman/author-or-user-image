@@ -50,21 +50,40 @@ final class Migration {
 		if ( version_compare( (string) get_option( Image_Store::VERSION_OPTION, '0' ), ZMAI_VERSION, '>=' ) ) {
 			return;
 		}
+		$this->with_migration_lock(
+			function () {
+				$this->migrate_locked();
+			}
+		);
+	}
+
+	/**
+	 * Serialize legacy and explicit import coordinators with exact-token release.
+	 * Callers may acquire owner locks inside the callback, never in reverse order.
+	 *
+	 * @param callable $callback Coordinator operation.
+	 * @return mixed|WP_Error Callback result or lock/storage failure.
+	 */
+	public function with_migration_lock( $callback ) {
 		$lock = $this->store->get_lock()->acquire_lock( 'zmai_avatar_lock_migration' );
 		if ( is_wp_error( $lock ) ) {
-			return;
+			return $lock;
 		}
+		$result = null;
 		try {
-			$this->migrate_locked();
+			$result = call_user_func( $callback );
 		} catch ( \Throwable $error ) {
-			$this->report_error( $this->store->storage_error() );
+			$result = $this->store->storage_error();
+			$this->report_error( $result );
 		} finally {
 			$released = $this->store->get_lock()->release_lock( $lock );
 			if ( is_wp_error( $released ) ) {
 				update_option( self::RELEASE_FAILED_OPTION, 1, false );
 				$this->report_error( $released );
+				$result = $released;
 			}
 		}
+		return $result;
 	}
 
 	/**

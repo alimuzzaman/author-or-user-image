@@ -122,3 +122,32 @@ recovery failures, and busy results at the limit, return `done=true` with retain
 data and no removal claim. A later explicitly restarted erasure can retry after
 recovery. Full release package tests have a separate synthetic secret-path guard;
 select only tests compatible with the current task's file-access restrictions.
+
+The shared 3.1 foundation adds three disposable-site suites. Run each on both
+single-site and multisite, serialized with every other suite using that site:
+
+```sh
+wp --path=/absolute/disposable/wordpress --require=/absolute/plugin/tests/candidate-bootstrap.php eval-file /absolute/plugin/tests/upload-policy.php
+wp --path=/absolute/disposable/wordpress --require=/absolute/plugin/tests/candidate-bootstrap.php eval-file /absolute/plugin/tests/image-processing.php
+wp --path=/absolute/disposable/wordpress --require=/absolute/plugin/tests/candidate-bootstrap.php eval-file /absolute/plugin/tests/phase1-store.php
+```
+
+Policy covers missing/selected/corrupt settings, fresh roles and capabilities,
+blocks, checked nonautoloaded persistence and opposite network policies.
+Processing uses real asymmetric pixels, JPEG EXIF orientations 1–8, PNG alpha,
+static/extended WebP and bounded malformed/animated containers. It runs GD and
+Imagick where installed and prints `MISSING` for unavailable backend cells.
+To exercise the missing-EXIF branch, run the processing suite with
+`ZMAI_IMAGE_PROCESSOR_MODE=missing-exif` and PHP's
+`-d disable_functions=exif_read_data`. A missing cell is not a passing result.
+Store checks typed import outcomes, source preservation, square metadata/files,
+post-commit cleanup retries, rate windows/storage failures and privacy cleanup.
+
+`http-runtime.py` accepts `--scratch /absolute/scratch` for its temporary server
+log and upload temp directory. Its policy and sixth-attempt checks use genuine
+multipart uploads, with synthetic loopback authentication as before. The
+independent-worker lifecycle suite additionally contends on the final available
+upload attempt. Test-only resets separate synthetic scenarios; they do not
+change or disable production rate limits. Neither harness proves real login or
+the phase 2 front-end forms. See [shared contracts](../docs/phase1-contracts.md)
+for the APIs the two feature worktrees can use.

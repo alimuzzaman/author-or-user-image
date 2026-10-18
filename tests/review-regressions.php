@@ -55,7 +55,7 @@ $read_fault = static function ( $sql ) {
 $uploads = wp_upload_dir();
 wp_mkdir_p( $uploads['path'] );
 $path = $uploads['path'] . '/review-' . uniqid() . '.png';
-$png = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVioAAAAASUVORK5CYII=' );
+$png = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=' );
 file_put_contents( $path, $png );
 $_FILES['zmai_review'] = array( 'name' => 'avatar.png', 'tmp_name' => $path, 'size' => strlen( $png ), 'error' => UPLOAD_ERR_OK );
 $previous = $GLOBALS['wpdb']->suppress_errors( true );
@@ -180,13 +180,18 @@ foreach ( $bulk_users as $bulk_user ) { if ( get_userdata( $bulk_user ) ) { if (
 $leftover = 'zmai_avatar_lock_review_uninstall';
 add_option( $leftover, 'test-only-leftover', '', false );
 $opt_in = get_option( Image_Store::DELETE_DATA_OPTION, null );
+update_option( 'zmai_upload_policy', array( 'schema' => 1, 'mode' => 'roles', 'roles' => array() ), false );
+update_option( 'zmai_import_job', array( 'schema' => 1 ), false );
+update_user_meta( $user, Image_Store::user_meta_key( Image_Store::UPLOAD_RATE_META ), array( 'minute_start' => time(), 'minute_count' => 1, 'hour_start' => time(), 'hour_count' => 1 ) );
 delete_option( Image_Store::DELETE_DATA_OPTION );
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) { define( 'WP_UNINSTALL_PLUGIN', 'author-or-user-image/author_image.php' ); }
 include ZMAI_PATH . 'uninstall.php';
 $expect( 'test-only-leftover' === get_option( $leftover ), 'N4 opted-out uninstall preserves a leftover lock' );
+$expect( get_option( 'zmai_upload_policy' ) && get_option( 'zmai_import_job' ) && metadata_exists( 'user', $user, Image_Store::user_meta_key( Image_Store::UPLOAD_RATE_META ) ), 'phase1 opted-out uninstall preserves policy, job and rate data' );
 update_option( Image_Store::DELETE_DATA_OPTION, 1 );
 zmai_uninstall_site_data();
 $expect( false === get_option( $leftover ), 'N4 opted-in uninstall removes leftover lock rows' );
+$expect( ! get_option( 'zmai_upload_policy' ) && ! get_option( 'zmai_import_job' ) && ! metadata_exists( 'user', $user, Image_Store::user_meta_key( Image_Store::UPLOAD_RATE_META ) ), 'phase1 opted-in uninstall removes policy, job and scoped rate data' );
 if ( null !== $opt_in ) { update_option( Image_Store::DELETE_DATA_OPTION, $opt_in ); }
 delete_option( $leftover );
 wp_delete_user( $user );

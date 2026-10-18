@@ -64,9 +64,19 @@ function zmai_lifecycle_barrier( $state, $name, $data ) {
 		usleep( 10000 );
 	}
 }
+if ( 'prime-rate-fixture' === $mode ) {
+	update_user_meta( $user->ID, AuthorOrUserImage\Image_Store::user_meta_key( AuthorOrUserImage\Image_Store::UPLOAD_RATE_META ), array( 'minute_start' => time(), 'minute_count' => 4, 'hour_start' => time(), 'hour_count' => 4 ) );
+	echo '{}';
+	exit;
+}
+if ( 'reset-rate-fixture' === $mode ) {
+	delete_user_meta( $user->ID, AuthorOrUserImage\Image_Store::user_meta_key( AuthorOrUserImage\Image_Store::UPLOAD_RATE_META ) );
+	echo '{}';
+	exit;
+}
 if ( 'snapshot' === $mode ) {
 	$id = $default ? $store->get_default_attachment_id() : $store->get_user_attachment_id( $owner );
-	echo wp_json_encode( array( 'mapped' => $id, 'owned' => zmai_lifecycle_owned( $owner ), 'blocked' => $store->is_blocked( $user->ID ), 'user' => $user->ID, 'plugin' => realpath( ZMAI_PATH ), 'cache' => wp_using_ext_object_cache() ) );
+	echo wp_json_encode( array( 'mapped' => $id, 'owned' => zmai_lifecycle_owned( $owner ), 'blocked' => $store->is_blocked( $user->ID ), 'user' => $user->ID, 'plugin' => realpath( ZMAI_PATH ), 'cache' => wp_using_ext_object_cache(), 'rate' => get_user_meta( $user->ID, AuthorOrUserImage\Image_Store::user_meta_key( AuthorOrUserImage\Image_Store::UPLOAD_RATE_META ), true ) ) );
 	exit;
 }
 if ( 'nonce' === $mode ) {
@@ -77,7 +87,7 @@ if ( 'seed' === $mode ) {
 	$uploads = wp_upload_dir();
 	wp_mkdir_p( $uploads['path'] );
 	$path = $uploads['path'] . '/' . $fixture . '-' . uniqid() . '.png';
-	file_put_contents( $path, base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVioAAAAASUVORK5CYII=' ) );
+	file_put_contents( $path, base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=' ) );
 	$id = wp_insert_attachment( array( 'post_mime_type' => 'image/png', 'post_title' => $fixture ), $path );
 	$marker = isset( $_GET['foreign'] ) ? 'foreign-' . $fixture : ( $owner ? (string) $owner : 'default' );
 	update_post_meta( $id, AuthorOrUserImage\Image_Store::ATTACHMENT_OWNER_META, $marker );

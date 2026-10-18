@@ -29,6 +29,15 @@ if ( ! $user ) {
 wp_set_current_user( $user->ID );
 $store = new AuthorOrUserImage\Image_Store();
 $action = isset( $_GET['action'] ) ? sanitize_key( $_GET['action'] ) : 'snapshot';
+if ( 'reset-rate-fixture' === $action ) {
+	delete_user_meta( $user->ID, AuthorOrUserImage\Image_Store::user_meta_key( AuthorOrUserImage\Image_Store::UPLOAD_RATE_META ) );
+	echo '{}';
+	exit;
+}
+if ( 'policy-fixture' === $action ) {
+	echo wp_json_encode( ( new AuthorOrUserImage\Upload_Policy( $store ) )->get_policy() );
+	exit;
+}
 if ( 'nonce' === $action ) {
 	echo wp_json_encode( array( 'nonce' => wp_create_nonce( sanitize_key( $_GET['for'] ) ) ) );
 	exit;

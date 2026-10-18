@@ -188,6 +188,10 @@ final class User_Cleanup {
 		if ( is_wp_error( $retained ) ) {
 			return $retained;
 		}
+		$result = $this->store->write_value( $user_id, Image_Store::UPLOAD_RATE_META, '', null );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
 		$result = $this->store->write_value( $user_id, Image_Store::BLOCKED_META, '', null );
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -205,7 +209,7 @@ final class User_Cleanup {
 		global $wpdb;
 		$values = $this->store->database_values(
 			$wpdb->prepare(
-				'SELECT (EXISTS (SELECT 1 FROM %i WHERE option_name LIKE %s OR option_name IN (%s, %s, %s)) OR EXISTS (SELECT 1 FROM %i WHERE user_id = %d AND meta_key IN (%s, %s, %s)) OR EXISTS (SELECT 1 FROM %i WHERE meta_key = %s AND meta_value = %s))',
+				'SELECT (EXISTS (SELECT 1 FROM %i WHERE option_name LIKE %s OR option_name IN (%s, %s, %s)) OR EXISTS (SELECT 1 FROM %i WHERE user_id = %d AND meta_key IN (%s, %s, %s, %s)) OR EXISTS (SELECT 1 FROM %i WHERE meta_key = %s AND meta_value = %s))',
 				$wpdb->options,
 				$wpdb->esc_like( 'zmai_' ) . '%',
 				Image_Store::LEGACY_SIZE_OPTION,
@@ -216,6 +220,7 @@ final class User_Cleanup {
 				Image_Store::user_meta_key( Image_Store::USER_META ),
 				Image_Store::user_meta_key( Image_Store::MIGRATED_USER_META ),
 				Image_Store::user_meta_key( Image_Store::BLOCKED_META ),
+				Image_Store::user_meta_key( Image_Store::UPLOAD_RATE_META ),
 				$wpdb->postmeta,
 				Image_Store::ATTACHMENT_OWNER_META,
 				(string) $user_id

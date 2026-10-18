@@ -62,7 +62,7 @@ $expect( ! is_wp_error( $store->set_blocked( $user_id, false ) ) && ! $store->is
 // Failed mapping/ownership writes must leave no staged orphan and no false upload success.
 $uploads = wp_upload_dir();
 wp_mkdir_p( $uploads['path'] );
-$png = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVioAAAAASUVORK5CYII=' );
+$png = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=' );
 $upload = static function () use ( $store, $user_id, $uploads, $png ) {
 	$tmp = $uploads['path'] . '/stage-' . uniqid() . '.png';
 	file_put_contents( $tmp, $png );
@@ -121,7 +121,7 @@ if ( is_array( $after ) ) { $call( 'release_lock', $after ); }
 $uploads = wp_upload_dir();
 wp_mkdir_p( $uploads['path'] );
 $path = $uploads['path'] . '/lock-retention-' . uniqid() . '.png';
-file_put_contents( $path, base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVioAAAAASUVORK5CYII=' ) );
+file_put_contents( $path, base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=' ) );
 $id = wp_insert_attachment( array( 'post_mime_type' => 'image/png', 'meta_input' => array( Image_Store::ATTACHMENT_OWNER_META => (string) $user_id ) ), $path );
 update_user_meta( $user_id, Image_Store::user_meta_key( Image_Store::USER_META ), $id );
 $deny = static function () { return ''; };

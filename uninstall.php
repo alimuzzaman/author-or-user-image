@@ -36,6 +36,9 @@ function zmai_uninstall_site_data() {
 	delete_metadata( 'user', 0, AuthorOrUserImage\Image_Store::user_meta_key( '_zmai_avatar_attachment_id' ), '', true );
 	delete_metadata( 'user', 0, AuthorOrUserImage\Image_Store::user_meta_key( '_zmai_migrated_avatar_id' ), '', true );
 	delete_metadata( 'user', 0, AuthorOrUserImage\Image_Store::user_meta_key( '_zmai_avatar_blocked' ), '', true );
+	delete_metadata( 'user', 0, AuthorOrUserImage\Image_Store::user_meta_key( '_zmai_avatar_upload_rate' ), '', true );
+	delete_option( 'zmai_upload_policy' );
+	delete_option( 'zmai_import_job' );
 	delete_option( 'zmai_default_avatar_id' );
 	delete_option( 'zmai_migrated_default_avatar_id' );
 	delete_option( 'zmai_data_version' );

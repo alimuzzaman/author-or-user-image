@@ -80,6 +80,37 @@ owner mutation release the owner lock. Read failures after mutation retain it.
 No failed owner is marked migrated; existing mappings and legacy files retain
 their prior precedence. A repaired file is retried on a later sweep.
 
+## Shared 3.1 storage foundation
+
+`Migration::with_migration_lock($callback)` shares the existing coordinator
+mutex with explicit local imports. Acquire migration before an owner, never
+while holding an owner lock. `Image_Store::import_local_image($resolve_source,
+$user_id)` resolves a current-site local source inside its own owner lock,
+copies bounded bytes to a new owned attachment and writes only the migrated
+fallback. It never changes source media. An explicit choice, including zero,
+suppresses import. A valid existing fallback retries old owned-media cleanup
+before returning `already_present`. A post-commit cleanup error remains an
+error even when the new mapping is already present.
+
+New uploads/imports confirm `sizes['zmai-avatar']` and
+`_zmai_avatar_square_version=1` before publishing their mapping. Include that
+square file in recovery inventory along with the effective original, retained
+original and other recorded sizes. A lost marked square does not fall back to
+the uncropped original. Existing unmarked media keeps its historical rendering.
+Known failed metadata writes remove the generated square; uncertain writes or
+failed physical rollback retain the owner fence. Generated upload/import names
+prevent a missing historical original from sharing the replacement's path.
+
+Self-upload policy and the site-scoped `_zmai_avatar_upload_rate` record are
+checked under the same owner lock before image decoding. Counters store only
+minute/hour starts and counts, with limits of five and twenty authorized
+attempts. Backward clocks do not open new windows. Defaults use the separate
+default lock and no user counter. Removal, moderation and erasure are not
+throttled. Privacy/account cleanup deletes the scoped counter while privacy's
+explicit zero keeps source data from recreating the avatar. Opted-in uninstall
+also removes `zmai_upload_policy` and the reserved `zmai_import_job` option.
+The phase 2 importer coordinator and front-end forms are separate work.
+
 ## Network activation and size
 
 Network cleanup requires network activation or activation on the main site, so

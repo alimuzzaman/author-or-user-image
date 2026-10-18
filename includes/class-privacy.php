@@ -53,7 +53,7 @@ final class Privacy {
 
 		wp_add_privacy_policy_content(
 			__( 'Author or User Image', 'author-or-user-image' ),
-			'<p>' . esc_html__( 'This plugin stores profile avatar images in this site’s WordPress Media Library. It may process the user ID, avatar attachment ID, avatar URL, and blocked-upload setting for the relevant account. The plugin does not send this data to an external service.', 'author-or-user-image' ) . '</p>'
+			'<p>' . esc_html__( 'This plugin stores profile avatar images in this site’s WordPress Media Library. It may process the user ID, avatar attachment ID, avatar URL, blocked-upload setting, and short upload-attempt counters and reset times for the relevant account. Center cropping retains the uncropped original and its metadata in the Media Library. The plugin does not send this data to an external service.', 'author-or-user-image' ) . '</p>'
 		);
 	}
 
@@ -115,6 +115,25 @@ final class Privacy {
 			'name'  => __( 'Avatar uploads blocked', 'author-or-user-image' ),
 			'value' => $this->store->is_blocked( $user->ID ) ? __( 'Yes', 'author-or-user-image' ) : __( 'No', 'author-or-user-image' ),
 		);
+
+		$rate = get_user_meta( $user->ID, Image_Store::user_meta_key( Image_Store::UPLOAD_RATE_META ), true );
+		if ( is_array( $rate ) ) {
+			foreach ( array(
+				'minute' => 60,
+				'hour'   => 3600,
+			) as $window => $seconds ) {
+				if ( isset( $rate[ $window . '_count' ], $rate[ $window . '_start' ] ) && is_int( $rate[ $window . '_count' ] ) && is_int( $rate[ $window . '_start' ] ) ) {
+					$data[] = array(
+						'name'  => 'minute' === $window ? __( 'Upload attempts in minute window', 'author-or-user-image' ) : __( 'Upload attempts in hour window', 'author-or-user-image' ),
+						'value' => (string) $rate[ $window . '_count' ],
+					);
+					$data[] = array(
+						'name'  => 'minute' === $window ? __( 'Minute upload window resets at UTC', 'author-or-user-image' ) : __( 'Hour upload window resets at UTC', 'author-or-user-image' ),
+						'value' => gmdate( 'Y-m-d H:i:s', $rate[ $window . '_start' ] + $seconds ),
+					);
+				}
+			}
+		}
 
 		return array(
 			'data' => array(
