@@ -150,6 +150,21 @@ try {
 	$stringy['counts']['skipped'] = '1';
 	zmai_it_check( ! $valid( $stringy ), 'schema rejects a string skipped count' );
 
+	// 1b. Source-changed and image-editor failures are not permanent skips; zmai_import_path has no producer.
+	$reason_of = new ReflectionMethod( Migration::class, 'permanent_import_reason' );
+	if ( PHP_VERSION_ID < 80100 ) {
+		$reason_of->setAccessible( true );
+	}
+	foreach ( array( 'zmai_source_changed', 'zmai_image_editor', 'zmai_import_path' ) as $code ) {
+		zmai_it_check( '' === $reason_of->invoke( $migration, $code ), 'permanent_import_reason returns empty for ' . $code );
+	}
+	zmai_it_check( 'missing_file' === $reason_of->invoke( $migration, 'zmai_import_missing_file' ), 'permanent_import_reason still maps zmai_import_missing_file to missing_file' );
+	// Schema-1 jobs persisted before this change may already hold these reasons; they must keep validating.
+	$persisted_reasons = $job_base;
+	$persisted_reasons['skips'] = array( array( 'user_id' => 7, 'reason' => 'source_changed' ), array( 'user_id' => 8, 'reason' => 'image_editor' ) );
+	$persisted_reasons['counts']['skipped'] = 2;
+	zmai_it_check( $valid( $persisted_reasons ), 'existing skip records with source_changed and image_editor reasons stay schema-valid' );
+
 	// 2. Permanent skips only: a sweep completes and records owner IDs with fixed reason codes.
 	delete_option( 'zmai_import_job' );
 	$missing = zmai_it_user();

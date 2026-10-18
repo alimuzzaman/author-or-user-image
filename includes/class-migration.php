@@ -405,7 +405,6 @@ final class Migration {
 			'zmai_import_invalid_source'     => 'invalid_source',
 			'zmai_import_missing_file'       => 'missing_file',
 			'zmai_import_unsupported_source' => 'unsupported_source',
-			'zmai_import_path'               => 'invalid_source',
 			'zmai_invalid_source'            => 'invalid_source',
 			'zmai_invalid_image'             => 'invalid_image',
 			'zmai_upload_size'               => 'upload_size',
@@ -413,9 +412,7 @@ final class Migration {
 			'zmai_invalid_image_container'   => 'invalid_image_container',
 			'zmai_invalid_dimensions'        => 'invalid_dimensions',
 			'zmai_jpeg_exif_unavailable'     => 'jpeg_exif_unavailable',
-			'zmai_image_editor'              => 'image_editor',
 			'zmai_image_format'              => 'image_format',
-			'zmai_source_changed'            => 'source_changed',
 		);
 		return $reasons[ $code ] ?? '';
 	}
@@ -456,7 +453,8 @@ final class Migration {
 				return false;
 			}
 			foreach ( $job['skips'] as $skip ) {
-				if ( ! is_array( $skip ) || 2 !== count( $skip ) || ! isset( $skip['user_id'], $skip['reason'] ) || ! is_int( $skip['user_id'] ) || $skip['user_id'] < 1 || ! is_string( $skip['reason'] ) || ( ! $this->permanent_import_reason( 'zmai_' . $skip['reason'] ) && ! $this->permanent_import_reason( 'zmai_import_' . $skip['reason'] ) ) ) {
+				// Schema-1 jobs may already contain these formerly permanent reasons.
+				if ( ! is_array( $skip ) || 2 !== count( $skip ) || ! isset( $skip['user_id'], $skip['reason'] ) || ! is_int( $skip['user_id'] ) || $skip['user_id'] < 1 || ! is_string( $skip['reason'] ) || ( ! in_array( $skip['reason'], array( 'source_changed', 'image_editor' ), true ) && ! $this->permanent_import_reason( 'zmai_' . $skip['reason'] ) && ! $this->permanent_import_reason( 'zmai_import_' . $skip['reason'] ) ) ) {
 					return false;
 				}
 			}

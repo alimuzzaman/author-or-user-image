@@ -451,11 +451,20 @@ final class Image_Processor {
 	 * @return WP_Error
 	 */
 	private static function square_failure( $path, $message ) {
-		$remaining = array();
+		$remaining        = array();
+		$inventory_failed = false;
 		if ( $path ) {
 			$stem  = pathinfo( $path, PATHINFO_FILENAME );
-			$files = glob( dirname( $path ) . '/' . $stem . '.*' );
-			foreach ( is_array( $files ) ? $files : array( $path ) as $file ) {
+			$files = @scandir( dirname( $path ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A failed cleanup listing is retained as recovery inventory below.
+			if ( false === $files ) {
+				$inventory_failed = true;
+				$remaining[]      = basename( $path );
+			}
+			foreach ( is_array( $files ) ? $files : array() as $filename ) {
+				if ( 0 !== strpos( $filename, $stem . '.' ) ) {
+					continue;
+				}
+				$file = dirname( $path ) . '/' . $filename;
 				try {
 					$removed = self::remove_file( $file );
 				} catch ( \Throwable $error ) {
@@ -466,7 +475,14 @@ final class Image_Processor {
 				}
 			}
 		}
-		return self::error( 'zmai_image_save_failed', $message, $remaining ? array( 'cleanup_files' => $remaining ) : null );
+		return self::error(
+			'zmai_image_save_failed',
+			$message,
+			$remaining ? array(
+				'cleanup_files' => $remaining,
+				'recovery'      => $inventory_failed,
+			) : null
+		);
 	}
 
 	/**

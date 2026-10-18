@@ -485,6 +485,14 @@ function zmai_fe_render_contract() {
 	$allowed_doc = zmai_fe_dom( $allowed );
 	zmai_fe_expect( is_string( $allowed ) && 1 === zmai_fe_count( $allowed_doc, '//input[@type="file"]' ), 'allowed subscriber gets exactly one file input' );
 	zmai_fe_expect( zmai_fe_forms_unnested( $allowed ) && 2 === zmai_fe_count( $allowed_doc, '//form[@method="post" and contains(@action,"admin-post.php")]' ), 'upload and removal are two unnested POST forms to admin-post.php' );
+	// Raw attribute value, not a parsed URL: stray whitespace around the rendered action is a regression.
+	$upload_actions = zmai_fe_attr_values( $allowed_doc, '//form[contains(@class,"zmai-upload-form")]', 'action' );
+	$upload_action  = $upload_actions[0] ?? '';
+	zmai_fe_expect( 1 === count( $upload_actions ) && '' !== $upload_action && $upload_action === trim( $upload_action ), 'upload form action attribute has no leading or trailing whitespace' );
+	$upload_url   = (array) wp_parse_url( trim( $upload_action ) );
+	$upload_query = array();
+	parse_str( (string) ( $upload_url['query'] ?? '' ), $upload_query );
+	zmai_fe_expect( 'admin-post.php' === basename( (string) ( $upload_url['path'] ?? '' ) ) && 'zmai_save_avatar' === ( $upload_query['action'] ?? '' ) && 'front' === ( $upload_query['zmai_context'] ?? '' ) && array_key_exists( 'zmai_return', $upload_query ), 'upload form posts to admin-post with action=zmai_save_avatar, zmai_context=front and zmai_return' );
 	zmai_fe_expect( 1 === zmai_fe_count( $allowed_doc, '//form[@enctype="multipart/form-data"]//input[@name="action" and @value="zmai_save_avatar"]' ), 'the multipart form is the zmai_save_avatar form' );
 	zmai_fe_expect( 0 === zmai_fe_count( $allowed_doc, '//form[.//input[@name="action" and @value="zmai_remove_avatar"]]//input[@type="file"]' ), 'the removal form has no file input' );
 	zmai_fe_expect( 1 === zmai_fe_count( $allowed_doc, '//form[.//input[@name="action" and @value="zmai_save_avatar"]]//input[@name="zmai_context" and @value="front"]' ) && 1 === zmai_fe_count( $allowed_doc, '//form[.//input[@name="action" and @value="zmai_remove_avatar"]]//input[@name="zmai_context" and @value="front"]' ), 'both forms post zmai_context=front' );

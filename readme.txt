@@ -109,6 +109,10 @@ Each new upload and competitor import gets a square rendition, cropped from the 
 
 Center cropping can cut off a face near an edge, so upload a square or centered photo for the best result. A small image may be enlarged for display, which can look soft.
 
+= Are media-offload setups supported? =
+
+New uploads need the local file until the square avatar is generated. Offload setups that delete local copies before then are not supported for uploads. Existing avatars keep rendering from attachment metadata.
+
 Existing avatars and legacy JPG files are not rewritten. They keep their current display until the user replaces them. Changing the avatar size affects newly processed uploads and imports only.
 
 An uncropped original is never served as a replacement for a missing square file.

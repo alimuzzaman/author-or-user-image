@@ -85,7 +85,9 @@ New squares use metadata sizes['zmai-avatar'] and attachment marker
 Rendering uses metadata, so offload and recompression do not hide an avatar;
 missing square metadata and existing unmarked media use 3.0.x URL behavior.
 Store owns staging inventory and rollback; unconfirmed database state retains
-the recovery fence.
+the owner fence. Cleanup lists literal directories and matches only the generated
+UUID stem and image extensions/subsizes. A failed listing retains cleanup
+inventory and the fence; an exception without a recognized staged file does too.
 
 `Migration::with_migration_lock($callback)` returns callback result or WP_Error,
 uses the existing migration mutex and reports exact-token release failures.

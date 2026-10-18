@@ -254,7 +254,7 @@ final class Image_Store {
 	 *
 	 * @param callable $callback Core upload or sideload operation.
 	 * @return mixed
-	 * @throws \Throwable When an authoritative database failure needs recovery.
+	 * @throws \Throwable When database state or the staged file cannot be reconciled.
 	 */
 	private function stage_media( $callback ) {
 		global $wpdb;
@@ -285,7 +285,7 @@ final class Image_Store {
 		try {
 			$result = $callback();
 		} catch ( \Throwable $error ) {
-			if ( $wpdb->last_error ) {
+			if ( $wpdb->last_error || ! $stage['file'] ) {
 				throw $error;
 			}
 			$result = $this->storage_error();
@@ -309,14 +309,21 @@ final class Image_Store {
 		// Core may write subsizes before a metadata callback throws. The UUID stem
 		// belongs only to this staging call, so its file inventory is still known.
 		$stem  = pathinfo( $stage['file'], PATHINFO_FILENAME );
-		$files = glob( dirname( $stage['file'] ) . '/' . $stem . '*' );
+		$files = @scandir( dirname( $stage['file'] ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A failed listing must retain the attachment inventory and owner fence.
+		if ( false === $files ) {
+			return $this->storage_error( true );
+		}
 		if ( $stage['id'] ) {
 			$cleanup = $this->delete_attachment_checked( $stage['id'] );
 			if ( is_wp_error( $cleanup ) && $this->database_values( $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->posts, $stage['id'] ) ) ) {
 				return $cleanup;
 			}
 		}
-		foreach ( is_array( $files ) ? $files : array( $stage['file'] ) as $file ) {
+		foreach ( $files as $filename ) {
+			if ( ! preg_match( '/^' . preg_quote( $stem, '/' ) . '(?:-[0-9]+x[0-9]+|-scaled|-rotated)*\.[a-z0-9]+$/iD', $filename ) ) {
+				continue;
+			}
+			$file = dirname( $stage['file'] ) . '/' . $filename;
 			wp_delete_file( $file );
 			clearstatcache( true, $file );
 			if ( is_file( $file ) || is_link( $file ) ) {

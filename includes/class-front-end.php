@@ -200,6 +200,14 @@ final class Front_End {
 			$user_id = get_current_user_id();
 			$id      = wp_unique_id( 'zmai-avatar-' );
 			$url     = $this->store->get_url( $user_id, $this->store->get_size(), false );
+			$action  = add_query_arg(
+				array(
+					'action'       => 'zmai_save_avatar',
+					'zmai_context' => 'front',
+					'zmai_return'  => $return,
+				),
+				admin_url( 'admin-post.php' )
+			);
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Read-only fixed-code notice; raw text is never rendered.
 			$status = isset( $_GET['zmai_status'] ) ? wp_unslash( $_GET['zmai_status'] ) : '';
 			?>
@@ -210,20 +218,7 @@ final class Front_End {
 			<?php if ( $this->store->is_blocked( $user_id ) ) : ?>
 				<p><?php esc_html_e( 'An administrator has disabled local avatar uploads for your account.', 'author-or-user-image' ); ?></p>
 			<?php elseif ( $this->policy->can_upload( $user_id ) ) : ?>
-				<form class="zmai-upload-form" method="post" enctype="multipart/form-data" action="
-				<?php
-				echo esc_url(
-					add_query_arg(
-						array(
-							'action'       => 'zmai_save_avatar',
-							'zmai_context' => 'front',
-							'zmai_return'  => $return,
-						),
-						admin_url( 'admin-post.php' )
-					)
-				);
-				?>
-																									">
+				<form class="zmai-upload-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url( $action ); ?>">
 					<input type="hidden" name="action" value="zmai_save_avatar">
 					<input type="hidden" name="avatar_type" value="user">
 					<input type="hidden" name="zmai_context" value="front">

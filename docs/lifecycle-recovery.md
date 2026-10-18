@@ -123,7 +123,9 @@ throttled. Privacy/account cleanup deletes the scoped counter while privacy's
 explicit zero keeps source data from recreating the avatar. Opted-in uninstall
 also removes `zmai_upload_policy` and the reserved `zmai_import_job` option.
 The explicit importer distinguishes deterministic source/validation skips from
-temporary lock and persistence failures. A skip-only sweep completes. The job
+temporary lock and persistence failures. Source changes during copying and image
+editor failures are retryable. Older skip records for these reasons remain
+readable. A skip-only sweep completes. The job
 stores at most 100 skipped user IDs and fixed reason codes, displayed on
 Users > Import avatars. Counts include skips beyond that cap. Restore or repair
 source files locally, then start a new import; successful existing mappings

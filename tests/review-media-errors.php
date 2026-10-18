@@ -100,11 +100,20 @@ function zmai_rme_empty_content( $empty, $post ) {
 
 /** Forced metadata failure after the attachment row exists. */
 function zmai_rme_metadata_throw( $metadata, $attachment_id ) {
-	if ( 'metadata' === $GLOBALS['zmai_rme_fault'] ) {
+	if ( in_array( $GLOBALS['zmai_rme_fault'], array( 'metadata', 'rename' ), true ) ) {
 		++$GLOBALS['zmai_rme_hits'];
 		throw new RuntimeException( 'Fixture metadata failed after insert.' );
 	}
 	return $metadata;
+}
+
+/** Simulate a rename-on-upload plugin after the store chooses its UUID name. */
+function zmai_rme_rename( $filename ) {
+	if ( 'rename' === $GLOBALS['zmai_rme_fault'] && 0 === strpos( $filename, 'zmai-upload-' ) ) {
+		++$GLOBALS['zmai_rme_hits'];
+		return 'renamed-' . $filename;
+	}
+	return $filename;
 }
 
 /** Forced failure only for the processor-generated avatar size. */
@@ -191,6 +200,7 @@ add_filter( 'wp_update_attachment_metadata', 'zmai_rme_update_throw', 10, 2 );
 add_filter( 'wp_image_editors', 'zmai_rme_editor' );
 add_filter( 'query', 'zmai_rme_read_fault' );
 add_action( 'add_attachment', 'zmai_rme_armed_after_insert' );
+add_filter( 'sanitize_file_name', 'zmai_rme_rename' );
 try {
 	$store = new Image_Store();
 	zmai_rme_case( $store, 'insert failure', 'insert', array( 400, 400 ), 'clean' );
@@ -198,6 +208,7 @@ try {
 	zmai_rme_case( $store, 'avatar size update throw', 'update', array( 400, 400 ), 'clean' );
 	zmai_rme_case( $store, 'partial editor save', 'editor', array( 61, 21 ), 'clean' );
 	zmai_rme_case( $store, 'read failure after insert', 'read', array( 400, 400 ), 'fence' );
+	zmai_rme_case( $store, 'renamed upload metadata throw', 'rename', array( 400, 400 ), 'fence' );
 	// A failed sideload leaves the plugin's temporary copy, not uncertain DB state.
 	$user_id = zmai_it_user();
 	$source = zmai_it_file();
@@ -231,6 +242,7 @@ try {
 	remove_filter( 'wp_image_editors', 'zmai_rme_editor' );
 	remove_filter( 'query', 'zmai_rme_read_fault' );
 	remove_action( 'add_attachment', 'zmai_rme_armed_after_insert' );
+	remove_filter( 'sanitize_file_name', 'zmai_rme_rename' );
 	$GLOBALS['zmai_rme_fault'] = '';
 	zmai_it_cleanup();
 }
