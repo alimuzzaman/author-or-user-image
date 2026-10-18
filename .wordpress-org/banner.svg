@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1544" height="500" viewBox="0 0 772 250" role="img" aria-labelledby="title desc">
+<title id="title">Author or User Image</title>
+<desc id="desc">Your profile. Your picture. A framed local avatar with an upload arrow, in teal, mint, and gold. The lower-left area is deliberately empty for the directory title overlay.</desc>
+<defs>
+<pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#c7d8cf"/></pattern>
+</defs>
+<rect width="772" height="250" fill="#f4f6ee"/>
+<path d="M482 0h290v250H509c-43-43-62-95-44-151z" fill="#e0ece1"/>
+<rect x="492" y="0" width="280" height="250" fill="url(#dots)"/>
+<circle cx="735" cy="29" r="72" fill="#d4e6d8"/>
+<g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" fill="#103f42">
+<text x="40" y="35" font-size="10" font-weight="700" letter-spacing="2.4">LOCAL AVATARS</text>
+<text x="38" y="81" font-size="39" font-weight="700" letter-spacing="-1.4">Author or</text>
+<text x="38" y="124" font-size="39" font-weight="700" letter-spacing="-1.4">User Image</text>
+<text x="40" y="157" font-size="17" font-weight="400" fill="#476460">Your profile. Your picture.</text>
+</g>
+<!-- Keep x=0..480, y=180..250 empty for WordPress.org's title overlay. -->
+<g transform="translate(501 26)">
+<rect x="8" y="12" width="176" height="188" rx="27" fill="#c1d8cc" transform="rotate(-9 96 106)"/>
+<rect x="18" y="4" width="176" height="188" rx="27" fill="#103f42"/>
+<path d="M164 29H60a17 17 0 0 0-17 17v103a17 17 0 0 0 17 17h68" fill="none" stroke="#93d8c2" stroke-width="7" stroke-linecap="round"/>
+<circle cx="104" cy="73" r="24" fill="#f7faf4"/>
+<path d="M64 140c0-23 17-37 40-37s40 14 40 37v4H64z" fill="#f7faf4"/>
+<circle cx="173" cy="169" r="35" fill="#103f42"/>
+<circle cx="173" cy="169" r="28" fill="#f3c66d"/>
+<path d="M173 182v-27m-11 11 11-11 11 11" fill="none" stroke="#103f42" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="164" cy="29" r="3.5" fill="#f3c66d"/>
+</g>
+<path d="M737 179v16m-8-8h16" stroke="#6c9b86" stroke-width="2" stroke-linecap="round"/>
+<circle cx="479" cy="52" r="4" fill="#d9af61"/>
+</svg>

@@ -1,67 +1,113 @@
-﻿=== Author or User Image ===
-Plugin Name: Author or User Image
+=== Author or User Image ===
 Contributors: alimuzzamanalim
-Author: Alimuzzaman Alim
-Author URI: https://alim.dev
-Donate link: none
-Tags: author-image, author, authors, image, avatar, gravatar.
-Requires at least: 5.0
-Tested up to: 6.0.2
-Stable tag: 2.0.2
-License: GPLv2
+Tags: local avatar, profile picture, gravatar alternative
+Requires at least: 6.6
+Tested up to: 7.1
+Requires PHP: 7.4
+Stable tag: 3.0.1
+License: GPL-2.0-or-later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Use a local avatar or profile picture for registered users, with a site default and a Gravatar alternative for those accounts.
 
 == Description ==
-WordPress Author / User Image lets you set the author image.
-With this plugin, you will be able to set the author's image.
-Ability to remove user image or block particular user. (New added)
-This photo will appear below the post in the about author section and also in their comment. When you have many users your users will be able to set their photos. It appears in the comment. You can resize the uploaded image. So no extra disk space or bandwidth will be lost. The most amazing part of this plugin is you can set a default image for your user. If any of your users do not set their image then show the default image.
 
+Author or User Image lets registered users upload an image that WordPress uses as their avatar in comments, author boxes, and other places that call the standard avatar functions.
 
-FEATURE of Author or User Image
+Features include:
 
-1. Set a default image for any user. (Who did not set their Image)
-2. Individually set user's image by user. (This image will be shown instead of the default image)
+* Self-service avatar upload and removal for registered users.
+* An optional default avatar for registered users without a personal image.
+* Administrator controls to remove images or block individual users from local avatar uploads.
+* Media Library storage and WordPress-generated image sizes.
+* Personal-data export and erasure integration.
+* Upgrade migration for images and blocked-user settings created by older versions.
 
-3. You can specify image size. (All images will be resized with this size before saving)
-
-4. You will also be able to remove your image or the default image.
-
-5. It's just below your profile page in the user section.
-
-6. Control over the user’s image.
-
-7. Ability to remove user’s image.
-
-8. Ability to block any user from setting his image.
-
-9. Ability to list all users who have set their image.
-
-10. Ability to list all users who are on your blacklist.
-
-
+The plugin does not send image or user data to an external service.
 
 == Installation ==
 
-To Set Image:
+1. Upload the plugin files to `/wp-content/plugins/author-or-user-image`, or install the plugin through the Plugins screen.
+2. Activate **Author or User Image**.
+3. Open **Users > Author or User Image** to upload your avatar.
+4. Administrators can set the site default on that page and manage user images under **Users > Avatar Management**.
 
-1. You can add your photo or a default photo in "User >> Author Image".
+== Frequently Asked Questions ==
 
-2. If you want to set a default image you will find this at the top of the page.
+= Where are new avatar images stored? =
 
-3. Click on the browse button. Then select an image.
+Version 3.0.0 stores new uploads as WordPress Media Library attachments. Attachments created by the plugin are marked internally so replacement, privacy erasure, and optional uninstall cleanup only delete plugin-managed files.
 
-4. You can specify image size. So all images will be resized to that size.
+= What happens to images from an older version? =
 
-5. At last click on save images to upload the image.
+An administrator visit starts a one-time migration. The plugin imports valid legacy JPG files into the Media Library and keeps the old files as a safe fallback. Existing image-size and blocked-user options are also understood and migrated.
 
+Temporary import failures are retried on a later administrator visit. On multisite, avatars and blocked-upload settings belong to each individual site.
 
-To Update Image:
+Imported images are stored separately from explicit uploads and removals, so a legacy import in progress cannot replace a newer user choice.
 
-1. If you want to update your image just upload it the first time, then it will replace your old image.
+Legacy images are read from the fixed `wp-content/uploads/author-image` location used by the old plugin, including on sites with a custom upload directory. On multisite, removing an avatar hides its legacy fallback on that site and retains the shared original for other sites. Privacy erasure reports any shared original it retains.
 
+= Does network user deletion clean avatars on every site? =
 
-To Remove/Delete Image
+Network cleanup requires network activation, or activation on the main site so the plugin loads in network admin. Activation only on a subsite cannot install a network deletion hook, so that subsite's avatar data may remain after a network account is deleted.
 
-1.  You can delete your image or default image. To delete your image go to "User >> Author Image" and scroll down to the bottom. There you find the image below.
+Deletion checks all existing sites in pages of 100. Sites without plugin settings, affected user metadata or owned images are skipped with one database existence check and receive no plugin rows. Cleanup runs synchronously and holds a fence for each affected site until deletion ends. Large networks should allow enough execution time and delete accounts in small batches. Keep site creation, removal and first avatar setup quiescent during deletion. A busy site aborts the account deletion so it can be retried.
 
+= Does uninstalling delete avatar data? =
 
+Not by default. Administrators may opt in under **Users > Avatar Management > Settings**. Deactivation never deletes data.
+
+Opted-in cleanup removes plugin settings and managed Media Library attachments for that site. Legacy JPG fallback files retained during upgrades remain in `uploads/author-image`; remove those separately if they are no longer needed.
+
+= Can subscribers upload an avatar? =
+
+Yes. Any logged-in user who can access their WordPress profile can upload an image for their own account unless an administrator has blocked local avatar uploads for that user. Only administrators can change the default image or manage other users.
+
+= Which file types are accepted? =
+
+The plugin accepts JPEG, PNG, and WebP images. WordPress verifies the actual file type and processes the upload with its image APIs.
+
+== Screenshots ==
+
+1. Upload, replace, or remove your avatar from your profile menu.
+2. Review user images and block local avatar uploads with administrator bulk controls.
+3. Choose the generated avatar size and whether plugin data is removed on uninstall.
+4. Custom avatars appear in front-end author cards and WordPress comments.
+5. Administrators can set a site default avatar for registered users without an uploaded image.
+
+== Upgrade Notice ==
+
+= 3.0.1 =
+
+Fixes privacy erasure and avatar cleanup during user deletion. Release metadata and package contents are checked before publication.
+
+= 3.0.0 =
+
+Major security and standards rewrite. Existing settings and legacy JPG avatars are migrated automatically and remain available as fallbacks.
+
+== Changelog ==
+
+= 3.0.1 =
+
+* Serialized avatar changes and cleanup to prevent orphaned files and false privacy-erasure success.
+* Bounded eraser retries, cleaned network user data, and released completed deletion fences on shutdown.
+* Kept legacy migration moving past failed imports and reported recovery failures.
+* Split storage, locking, migration and user cleanup into separate classes.
+* Aligned release metadata and added a production package check.
+
+= 3.0.0 =
+
+* Rebuilt avatar handling around current WordPress avatar, upload, image, and Media Library APIs.
+* Replaced login-based primary storage with user-ID attachment metadata.
+* Added idempotent migration and legacy-data fallbacks.
+* Added nonce and capability checks to every state-changing request.
+* Added strict upload validation, sanitization, and escaped output.
+* Replaced AJAX administration with accessible server-rendered forms and paginated tables.
+* Added personal-data exporter and eraser support.
+* Added optional, explicit uninstall cleanup.
+* Removed unused undocumented binary assets and the former branding from the display name.
+
+= 2.0.2 =
+
+* Previous public release.
