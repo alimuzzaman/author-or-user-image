@@ -207,12 +207,8 @@ final class Admin {
 	 * @return void
 	 */
 	public function save_avatar() {
-		if ( ! current_user_can( 'read' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do that.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
-		}
-		check_admin_referer( 'zmai_save_avatar' );
+		$type = $this->validate_avatar_request( 'zmai_save_avatar' );
 
-		$type    = isset( $_POST['avatar_type'] ) ? sanitize_key( wp_unslash( $_POST['avatar_type'] ) ) : 'user';
 		$user_id = get_current_user_id();
 		if ( 'default' === $type ) {
 			if ( ! current_user_can( 'manage_options' ) ) {
@@ -221,12 +217,18 @@ final class Admin {
 			$result = $this->store->save_upload( 'default_avatar', 0 );
 		} else {
 			if ( ! $this->policy->can_upload( $user_id ) ) {
+				if ( $this->is_front_request() ) {
+					$this->redirect( 'denied' );
+				}
 				wp_die( esc_html__( 'Local avatar uploads are disabled for your account.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
 			}
 			$result = $this->store->save_upload( 'user_avatar', $user_id );
 		}
 
 		if ( is_wp_error( $result ) ) {
+			if ( $this->is_front_request() && 'zmai_rate_limited' === $result->get_error_code() ) {
+				$this->redirect( 'rate-limited' );
+			}
 			$this->redirect( 'upload-error', $result->get_error_message() );
 		}
 		$this->redirect( 'uploaded' );
@@ -238,12 +240,8 @@ final class Admin {
 	 * @return void
 	 */
 	public function remove_avatar() {
-		if ( ! current_user_can( 'read' ) ) {
-			wp_die( esc_html__( 'You are not allowed to do that.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
-		}
-		check_admin_referer( 'zmai_remove_avatar' );
+		$type = $this->validate_avatar_request( 'zmai_remove_avatar' );
 
-		$type = isset( $_POST['avatar_type'] ) ? sanitize_key( wp_unslash( $_POST['avatar_type'] ) ) : 'user';
 		if ( 'default' === $type ) {
 			if ( ! current_user_can( 'manage_options' ) ) {
 				wp_die( esc_html__( 'You are not allowed to change the default avatar.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
@@ -257,6 +255,37 @@ final class Admin {
 			$this->redirect( 'upload-error', $result->get_error_message() );
 		}
 		$this->redirect( 'removed' );
+	}
+
+	/**
+	 * Recognize the strictly validated front-end context.
+	 *
+	 * @return bool
+	 */
+	private function is_front_request() {
+		return isset( $_POST['zmai_context'] ) && 'front' === $_POST['zmai_context']; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Called only in nonce-verified handlers and their redirect.
+	}
+
+	/**
+	 * Reject malformed transport before touching avatar storage.
+	 *
+	 * @param string $action Nonce action.
+	 * @return string Strict avatar type.
+	 */
+	private function validate_avatar_request( $action ) {
+		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] ) {
+			wp_die( esc_html__( 'A POST request is required.', 'author-or-user-image' ), '', array( 'response' => 405 ) );
+		}
+		if ( ! current_user_can( 'read' ) ) {
+			wp_die( esc_html__( 'You are not allowed to do that.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
+		}
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), $action ) ) {
+			wp_die( esc_html__( 'The security check failed. Reload the page and try again.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
+		}
+		if ( ! isset( $_POST['avatar_type'] ) || ! is_string( $_POST['avatar_type'] ) || ! in_array( $_POST['avatar_type'], array( 'user', 'default' ), true ) || ( isset( $_POST['zmai_context'] ) && 'front' !== $_POST['zmai_context'] ) || ( $this->is_front_request() && ( 'user' !== $_POST['avatar_type'] || ( isset( $_POST['zmai_return'] ) && ! is_string( $_POST['zmai_return'] ) ) ) ) ) {
+			wp_die( esc_html__( 'The avatar request is invalid.', 'author-or-user-image' ), '', array( 'response' => 400 ) );
+		}
+		return wp_unslash( $_POST['avatar_type'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Exact allowlist validation above, no normalization of malformed values.
 	}
 
 	/**
@@ -588,6 +617,13 @@ final class Admin {
 	 * @return void
 	 */
 	private function redirect( $status, $error = '' ) {
+		if ( $this->is_front_request() ) {
+			$status = Front_End::status_message( $status ) ? $status : 'upload-error';
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce verified by handler; strict origin/path validation follows.
+			$return = isset( $_POST['zmai_return'] ) ? wp_unslash( $_POST['zmai_return'] ) : '';
+			wp_safe_redirect( add_query_arg( 'zmai_status', $status, Front_End::safe_return_url( $return ) ), 303 );
+			exit;
+		}
 		$args = array(
 			'page'        => 'author-or-user-image',
 			'zmai_status' => sanitize_key( $status ),

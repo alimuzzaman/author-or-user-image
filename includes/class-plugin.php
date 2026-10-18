@@ -89,6 +89,7 @@ final class Plugin {
 			add_action( 'admin_notices', array( $this->migration, 'migration_notice' ) );
 		}
 
+		new Front_End( $this->store );
 		new Privacy( $this->store, $this->cleanup );
 	}
 

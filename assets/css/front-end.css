@@ -1,0 +1,21 @@
+.zmai-front-end {
+	box-sizing: border-box;
+	max-width: 36rem;
+	margin-block: 1.5rem;
+	padding: 1.25rem;
+	border: 1px solid #767676;
+	border-radius: .25rem;
+}
+.zmai-front-end .zmai-avatar-preview {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin-block: 1rem;
+}
+.zmai-front-end form { margin-block: 1rem; }
+.zmai-front-end label { display: block; font-weight: 600; margin-block-end: .5rem; }
+.zmai-front-end input[type="file"] { max-width: 100%; }
+.zmai-front-end button { cursor: pointer; padding: .5rem 1rem; }
+.zmai-front-end :is(a, input, button):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.zmai-front-end .zmai-status:empty,
+.zmai-front-end .zmai-status p:empty { display: none; }
