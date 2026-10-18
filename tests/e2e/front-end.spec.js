@@ -41,6 +41,19 @@ async function post(page, values) {
   return page.request.post('/wp-admin/admin-post.php', { form: values, maxRedirects: 0 });
 }
 test.use({ javaScriptEnabled: false });
+test('oversized native upload returns a clear error after PHP discards the body', async ({ page }) => {
+  await login(page);
+  await page.goto(`/?p=${fixture.post}`);
+  const form = wrapper(page).locator('.zmai-upload-form');
+  expect(await form.getAttribute('action')).toContain('action=zmai_save_avatar');
+  await form.locator('input[type=file]').setInputFiles({name:'too-large.jpg', mimeType:'image/jpeg', buffer:Buffer.alloc(17 * 1024 * 1024)});
+  const response = page.waitForResponse(r => r.url().includes('/wp-admin/admin-post.php') && r.request().method() === 'POST');
+  await form.getByRole('button', {name:'Upload image', exact:true}).click();
+  expect((await response).status()).toBe(303);
+  await expect(wrapper(page).getByRole('status')).toContainText('The upload exceeds the server request limit. Choose a smaller image.');
+  expect(page.url()).toContain(`p=${fixture.post}`);
+  expect(wp(`echo (new AuthorOrUserImage\\Image_Store())->get_user_attachment_id(${fixture.user});`)).toBe('0');
+});
 test.describe.configure({ mode: 'serial' });
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());

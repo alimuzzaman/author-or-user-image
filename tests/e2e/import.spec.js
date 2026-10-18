@@ -38,11 +38,14 @@ test.describe('competitor importer', () => {
     await page.goto(importer);
     await expect(page.locator('[data-zmai-count="inspected"]')).not.toHaveText('0');
     await page.getByRole('button', {name:/Continue|Resume/, exact:true}).click();
-    await expect(page.locator('[data-zmai-state]')).toHaveText('paused_with_failures', {timeout:90000});
-    await expect(page.locator('[data-zmai-count="failed"]')).not.toHaveText('0');
+    await expect(page.locator('[data-zmai-state]')).toHaveText('complete', {timeout:90000});
+    await expect(page.locator('[data-zmai-count="failed"]')).toHaveText('0');
+    await expect(page.locator('[data-zmai-count="skipped"]')).not.toHaveText('0');
+    await expect(page.locator('[data-zmai-skips]')).toContainText('missing_file');
     // Missing file restoration is a local fixture action; source metadata stays intact.
     fs.copyFileSync(data.repairPath, data.missingPath);
-    await page.getByRole('button', {name:'Retry repaired sources', exact:true}).click();
+    await page.getByLabel('Source plugin').selectOption(data.source);
+    await page.getByRole('button', {name:'Import avatars', exact:true}).click();
     await expect(page.locator('[data-zmai-state]')).toHaveText('complete', {timeout:90000});
     await expect(page.locator('[data-zmai-count="failed"]')).toHaveText('0');
     await page.goto(data.frontUrl);

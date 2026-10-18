@@ -1,5 +1,30 @@
 # Shared 3.1 contracts
 
+## Review fixes for 3.1.0
+
+Square saves pin their own input MIME for that save only. Deterministic editor
+and file failures clean staged files and release owner locks. Recovery fences
+are reserved for failed database reconciliation or an unverifiable committed
+mapping; ordinary image validation failures do not fence an owner.
+Rendering uses attachment square metadata and the version marker, without local
+filesystem checks, and caches decisions within the request. Missing square
+metadata uses the historical attachment URL fallback. Write-time square
+validation remains strict.
+
+Role definitions come from `wp_roles()`, including its global and option filters.
+Rendering must not invalidate the global user-query cache. Early no-cache
+headers apply only to queried content containing the upload block or shortcode;
+rendered template/widget forms also define `DONOTCACHEPAGE`.
+
+Import jobs retain schema 1 and accept an optional `skips` list of at most 100
+`{user_id:int,reason:string}` records. New jobs include that list and a `skipped`
+count. Deterministic source/validation failures are permanent skips; only busy
+locks and persistence failures request another sweep. Paused jobs may be
+finished through an authenticated, operation-nonce-protected `finish` action,
+which preserves counts and skips and permits a new source. Recovery-required
+jobs remain fenced. Main-site imports reject the multisite `sites/` subtree.
+No source path or URL is persisted in skip records.
+
 Baseline: `feature/3.1-avatar-features`, `fdf263eb1dde850359aeb73862b7f50b49545176`.
 Version stays 3.0.1 until final integration. Candidate loading uses
 `tests/candidate-bootstrap.php`, without replacing fixture plugin symlinks.
@@ -56,9 +81,11 @@ or WP_Error. Present USER_META, including zero or invalid IDs, suppresses import
 No source adapter, batch UI or permission endpoint is part of this phase.
 
 New squares use metadata sizes['zmai-avatar'] and attachment marker
-`_zmai_avatar_square_version=1`. Missing new square inventory never falls back to
-an uncropped original. Existing unmarked media retains 3.0.x rendering. Store
-owns staging inventory and rollback; uncertain IO retains the recovery fence.
+`_zmai_avatar_square_version=1`. Write-time inventory checks remain strict.
+Rendering uses metadata, so offload and recompression do not hide an avatar;
+missing square metadata and existing unmarked media use 3.0.x URL behavior.
+Store owns staging inventory and rollback; unconfirmed database state retains
+the recovery fence.
 
 `Migration::with_migration_lock($callback)` returns callback result or WP_Error,
 uses the existing migration mutex and reports exact-token release failures.
@@ -72,8 +99,9 @@ last_user_id:int,upper_user_id:int,sweep:int,revision:int,retry_needed:bool,
 counts:{inspected:int,imported:int,existing:int,suppressed:int,blocked:int,
 no_source:int,other_site:int,failed:int},last_error_code:string}`.
 Sources are simple-local-avatars, one-user-avatar, wp-user-avatars and
-metronet-profile-picture. No per-user logs, paths or URLs are stored.
-Import requests use fixed Start/Resume/Batch/Pause/Retry operations, POST,
+metronet-profile-picture. Jobs may retain the bounded skip list described above;
+no paths or URLs are stored.
+Import requests use fixed Start/Resume/Batch/Pause/Retry/Finish operations, POST,
 manage_options, operation nonce and job ID/revision. No arbitrary paths, class
 names, owner IDs or batch size from request input. Phase 2 implements transitions.
 

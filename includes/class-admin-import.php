@@ -37,7 +37,7 @@ final class Import_Admin {
 	public function register() {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
-		foreach ( array( 'start', 'batch', 'pause', 'resume', 'retry' ) as $operation ) {
+		foreach ( array( 'start', 'batch', 'pause', 'resume', 'retry', 'finish' ) as $operation ) {
 			add_action(
 				'admin_post_zmai_import_' . $operation,
 				function () use ( $operation ) {
@@ -87,7 +87,7 @@ final class Import_Admin {
 		if ( 'status' === $operation && 'GET' === $method ) {
 			return $this->migration->import_status();
 		}
-		if ( 'POST' !== $method || ! in_array( $operation, array( 'start', 'batch', 'pause', 'resume', 'retry' ), true ) ) {
+		if ( 'POST' !== $method || ! in_array( $operation, array( 'start', 'batch', 'pause', 'resume', 'retry', 'finish' ), true ) ) {
 			return $this->request_error( 'request' );
 		}
 		$id = $request['job_id'] ?? '';
@@ -115,6 +115,8 @@ final class Import_Admin {
 				return $this->migration->resume_import( $id, $revision );
 			case 'retry':
 				return $this->migration->retry_import( $id, $revision );
+			case 'finish':
+				return $this->migration->finish_import( $id, $revision );
 		}
 		return $this->request_error( 'request' );
 	}
@@ -171,7 +173,7 @@ final class Import_Admin {
 			return;
 		}
 		echo '<div aria-live="polite" aria-atomic="true" data-zmai-progress><p>' . esc_html__( 'State:', 'author-or-user-image' ) . ' <strong data-zmai-state>' . esc_html( $job ? $job['state'] : 'idle' ) . '</strong></p>';
-		$counts = $job ? $job['counts'] : array_fill_keys( array( 'inspected', 'imported', 'existing', 'suppressed', 'blocked', 'no_source', 'other_site', 'failed' ), 0 );
+		$counts = $job ? $job['counts'] : array_fill_keys( array( 'inspected', 'imported', 'existing', 'suppressed', 'blocked', 'no_source', 'other_site', 'failed', 'skipped' ), 0 );
 		$labels = array(
 			'inspected'  => __( 'Inspected', 'author-or-user-image' ),
 			'imported'   => __( 'Imported', 'author-or-user-image' ),
@@ -180,13 +182,22 @@ final class Import_Admin {
 			'blocked'    => __( 'Blocked', 'author-or-user-image' ),
 			'no_source'  => __( 'No source or source removed', 'author-or-user-image' ),
 			'other_site' => __( 'Source belongs to another site', 'author-or-user-image' ),
-			'failed'     => __( 'Failed; repair and retry', 'author-or-user-image' ),
+			'failed'     => __( 'Temporary failures; retry', 'author-or-user-image' ),
+			'skipped'    => __( 'Unsupported or missing files; repair before a new import', 'author-or-user-image' ),
 		);
 		echo '<ul>';
 		foreach ( $counts as $key => $count ) {
 			echo '<li>' . esc_html( $labels[ $key ] ) . ': <span data-zmai-count="' . esc_attr( $key ) . '">' . esc_html( (string) $count ) . '</span></li>';
 		}
 		echo '</ul><p data-zmai-message>' . esc_html__( 'Work runs only after an explicit action on this page. Closing the page stops further batches. Reopen and choose Continue or Resume.', 'author-or-user-image' ) . '</p></div>';
+		if ( $job && $job['skips'] ) {
+			echo '<h2>' . esc_html__( 'Skipped users', 'author-or-user-image' ) . '</h2><p>' . esc_html__( 'The first 100 skipped users and reason codes are listed below. Repair their source files, then start a new import. Counts include all skipped users.', 'author-or-user-image' ) . '</p><ul data-zmai-skips>';
+			foreach ( $job['skips'] as $skip ) {
+				/* translators: 1: numeric user ID, 2: fixed reason code. */
+				echo '<li>' . esc_html( sprintf( __( 'User %1$d: %2$s', 'author-or-user-image' ), $skip['user_id'], $skip['reason'] ) ) . '</li>';
+			}
+			echo '</ul>';
+		}
 		if ( ! $job || 'complete' === $job['state'] ) {
 			$this->form( 'start', $job, __( 'Import avatars', 'author-or-user-image' ) );
 		} else {
@@ -196,8 +207,10 @@ final class Import_Admin {
 				$this->form( 'pause', $job, __( 'Stop', 'author-or-user-image' ) );
 			} elseif ( 'paused' === $job['state'] ) {
 				$this->form( 'resume', $job, __( 'Resume', 'author-or-user-image' ) );
+				$this->form( 'finish', $job, __( 'Finish this import', 'author-or-user-image' ) );
 			} elseif ( 'paused_with_failures' === $job['state'] ) {
 				$this->form( 'retry', $job, __( 'Retry repaired sources', 'author-or-user-image' ) );
+				$this->form( 'finish', $job, __( 'Finish this import', 'author-or-user-image' ) );
 			} else {
 				echo '<p>' . esc_html__( 'Administrator recovery is required. Do not remove a live or unknown worker lock. See the lifecycle recovery guide.', 'author-or-user-image' ) . '</p>';
 			}
@@ -238,7 +251,7 @@ final class Import_Admin {
 	 */
 	private function nonces( $id ) {
 		$result = array();
-		foreach ( array( 'batch', 'pause', 'resume', 'retry' ) as $operation ) {
+		foreach ( array( 'batch', 'pause', 'resume', 'retry', 'finish' ) as $operation ) {
 			$result[ $operation ] = wp_create_nonce( 'zmai_import_' . $operation . '_' . $id );
 		}
 		return $result;

@@ -38,6 +38,13 @@ final class Image_Store {
 	private $lock;
 
 	/**
+	 * Metadata-keyed URL decisions shared by store instances for this request.
+	 *
+	 * @var array
+	 */
+	private static $attachment_urls = array();
+
+	/**
 	 * Lifecycle mutex shared with cleanup and migration.
 	 *
 	 * @param Lock|null $lock Lifecycle mutex shared with cleanup and migration.
@@ -154,20 +161,24 @@ final class Image_Store {
 				$this->load_media_api();
 				$this->register_image_size();
 				$this->lock->mark_mutation();
-				$attachment_id = media_handle_upload(
-					$field,
-					0,
-					array(
-						/* translators: %d: numeric WordPress user ID. */
-						'post_title' => $user_id ? sprintf( __( 'Avatar for user %d', 'author-or-user-image' ), $user_id ) : __( 'Default user avatar', 'author-or-user-image' ),
-						'meta_input' => array( self::ATTACHMENT_OWNER_META => $this->owner_name( $user_id ) ),
-					),
-					array(
-						'test_form'                => false,
-						'unique_filename_callback' => static function ( $directory, $name, $extension ) {
-							return wp_unique_filename( $directory, 'zmai-upload-' . wp_generate_uuid4() . $extension );
-						},
-					)
+				$attachment_id = $this->stage_media(
+					function () use ( $field, $user_id ) {
+						return media_handle_upload(
+							$field,
+							0,
+							array(
+								/* translators: %d: numeric WordPress user ID. */
+								'post_title' => $user_id ? sprintf( __( 'Avatar for user %d', 'author-or-user-image' ), $user_id ) : __( 'Default user avatar', 'author-or-user-image' ),
+								'meta_input' => array( self::ATTACHMENT_OWNER_META => $this->owner_name( $user_id ) ),
+							),
+							array(
+								'test_form'                => false,
+								'unique_filename_callback' => static function ( $directory, $name, $extension ) {
+									return wp_unique_filename( $directory, 'zmai-upload-' . wp_generate_uuid4() . $extension );
+								},
+							)
+						);
+					}
 				);
 				if ( is_wp_error( $attachment_id ) ) {
 					return $attachment_id;
@@ -238,6 +249,85 @@ final class Image_Store {
 	}
 
 	/**
+	 * Journal this core media call before it can fail to return its attachment ID.
+	 * Pin its validated format and reconcile failed staging before releasing locks.
+	 *
+	 * @param callable $callback Core upload or sideload operation.
+	 * @return mixed
+	 * @throws \Throwable When an authoritative database failure needs recovery.
+	 */
+	private function stage_media( $callback ) {
+		global $wpdb;
+		$stage         = array(
+			'file' => '',
+			'url'  => '',
+			'id'   => 0,
+		);
+		$pin_format    = static function () {
+			return array();
+		};
+		$remember_file = static function ( $upload ) use ( &$stage ) {
+			if ( is_array( $upload ) && ! empty( $upload['file'] ) && ! empty( $upload['url'] ) && preg_match( '/^zmai-(upload|import)-[a-f0-9-]+\./D', basename( $upload['file'] ) ) ) {
+				$stage['file'] = $upload['file'];
+				$stage['url']  = $upload['url'];
+			}
+			return $upload;
+		};
+		$remember_id   = static function ( $id ) use ( &$stage ) {
+			$post = get_post( $id );
+			if ( $stage['file'] && $post && ( $post->guid === $stage['url'] || get_attached_file( $id, true ) === $stage['file'] ) ) {
+				$stage['id'] = (int) $id;
+			}
+		};
+		add_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
+		add_filter( 'wp_handle_upload', $remember_file, -99999 );
+		add_action( 'add_attachment', $remember_id, -99999 );
+		try {
+			$result = $callback();
+		} catch ( \Throwable $error ) {
+			if ( $wpdb->last_error ) {
+				throw $error;
+			}
+			$result = $this->storage_error();
+		} finally {
+			remove_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
+			remove_filter( 'wp_handle_upload', $remember_file, -99999 );
+			remove_action( 'add_attachment', $remember_id, -99999 );
+		}
+		if ( ! is_wp_error( $result ) || ! $stage['file'] ) {
+			return $result;
+		}
+		// The generated UUID and core GUID identify this call even if an insert hook
+		// threw before add_attachment. A failed authoritative read retains the fence.
+		if ( ! $stage['id'] ) {
+			$ids = $this->database_values( $wpdb->prepare( "SELECT ID FROM %i WHERE post_type = 'attachment' AND guid = %s", $wpdb->posts, $stage['url'] ) );
+			if ( count( $ids ) > 1 ) {
+				return $this->storage_error( true );
+			}
+			$stage['id'] = $ids ? (int) $ids[0] : 0;
+		}
+		// Core may write subsizes before a metadata callback throws. The UUID stem
+		// belongs only to this staging call, so its file inventory is still known.
+		$stem  = pathinfo( $stage['file'], PATHINFO_FILENAME );
+		$files = glob( dirname( $stage['file'] ) . '/' . $stem . '*' );
+		if ( $stage['id'] ) {
+			$cleanup = $this->delete_attachment_checked( $stage['id'] );
+			if ( is_wp_error( $cleanup ) && $this->database_values( $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->posts, $stage['id'] ) ) ) {
+				return $cleanup;
+			}
+		}
+		foreach ( is_array( $files ) ? $files : array( $stage['file'] ) as $file ) {
+			wp_delete_file( $file );
+			clearstatcache( true, $file );
+			if ( is_file( $file ) || is_link( $file ) ) {
+				// No attachment row remains to retain this file inventory for a retry.
+				return $this->storage_error( true );
+			}
+		}
+		return $result;
+	}
+
+	/**
 	 * Copy a fresh current-site source under the owner mutex, preserving explicit intent.
 	 * Authorization of the administrator-initiated operation belongs to its caller.
 	 *
@@ -285,38 +375,51 @@ final class Image_Store {
 					return $this->storage_error();
 				}
 				$this->lock->mark_mutation();
+				$copy = null;
 				try {
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- A bounded local byte copy is required for core sideload; no remote filesystem transport.
-					if ( file_put_contents( $temporary, $bytes ) !== strlen( $bytes ) ) {
-						return $this->storage_error();
-					}
-					clearstatcache( true, $source['path'] );
-					$after = stat( $source['path'] );
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Recheck only the bounded local source bytes copied above.
-					$recheck = file_get_contents( $source['path'], false, null, 0, $validated['filesize'] + 1 );
-					if ( ! $before || ! $after || $after['ino'] !== $before['ino'] || $after['dev'] !== $before['dev'] || $after['size'] !== $before['size'] || ! $this->is_uploads_file( $source['path'] ) || ! is_string( $recheck ) || ! hash_equals( hash( 'sha256', $bytes ), hash( 'sha256', $recheck ) ) ) {
-						return new WP_Error( 'zmai_source_changed', __( 'The source image changed. Please retry.', 'author-or-user-image' ) );
-					}
-					$copy = $processor->validate_local_image( $temporary, $source['name'] );
-					if ( is_wp_error( $copy ) ) {
-						return $copy;
-					}
-					$this->register_image_size();
-					$id = media_handle_sideload(
-						array(
-							'name'     => 'zmai-import-' . wp_generate_uuid4() . '.' . pathinfo( $copy['name'], PATHINFO_EXTENSION ),
-							'tmp_name' => $temporary,
-						),
-						0,
-						null,
-						array( 'meta_input' => array( self::ATTACHMENT_OWNER_META => $this->owner_name( $user_id ) ) )
-					);
+					$stage_copy = function () use ( $temporary, $bytes, $source, $before, $processor, $validated, $user_id, &$copy ) {
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- A bounded local byte copy is required for core sideload; no remote filesystem transport.
+						if ( file_put_contents( $temporary, $bytes ) !== strlen( $bytes ) ) {
+							return $this->storage_error();
+						}
+						clearstatcache( true, $source['path'] );
+						$after = stat( $source['path'] );
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Recheck only the bounded local source bytes copied above.
+						$recheck = file_get_contents( $source['path'], false, null, 0, $validated['filesize'] + 1 );
+						if ( ! $before || ! $after || $after['ino'] !== $before['ino'] || $after['dev'] !== $before['dev'] || $after['size'] !== $before['size'] || ! $this->is_uploads_file( $source['path'] ) || ! is_string( $recheck ) || ! hash_equals( hash( 'sha256', $bytes ), hash( 'sha256', $recheck ) ) ) {
+							return new WP_Error( 'zmai_source_changed', __( 'The source image changed. Please retry.', 'author-or-user-image' ) );
+						}
+						$copy = $processor->validate_local_image( $temporary, $source['name'] );
+						if ( is_wp_error( $copy ) ) {
+							return $copy;
+						}
+						$this->register_image_size();
+						return $this->stage_media(
+							function () use ( $copy, $temporary, $user_id ) {
+								return media_handle_sideload(
+									array(
+										'name'     => 'zmai-import-' . wp_generate_uuid4() . '.' . pathinfo( $copy['name'], PATHINFO_EXTENSION ),
+										'tmp_name' => $temporary,
+									),
+									0,
+									null,
+									array( 'meta_input' => array( self::ATTACHMENT_OWNER_META => $this->owner_name( $user_id ) ) )
+								);
+							}
+						);
+					};
+					$id         = $stage_copy();
 				} finally {
-					wp_delete_file( $temporary );
 					clearstatcache( true, $temporary );
 					if ( is_file( $temporary ) ) {
-						return $this->storage_error( true );
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink,WordPress.PHP.NoSilencedErrors.Discouraged -- wp_tempnam created this private local copy; media deletion filters must not retain it.
+						@unlink( $temporary );
+						clearstatcache( true, $temporary );
 					}
+				}
+				if ( is_file( $temporary ) ) {
+					$error = $this->storage_error();
+					return is_int( $id ) && $id > 0 ? $this->rollback_unmapped( $id, $user_id, self::MIGRATED_USER_META, '', $error ) : $error;
 				}
 				if ( is_wp_error( $id ) ) {
 					return $id;
@@ -378,8 +481,10 @@ final class Image_Store {
 				'attachment_id' => 0,
 			);
 		}
-		$id = $this->validate_attachment_id( $this->read_value( $user_id, self::MIGRATED_USER_META, '' ) );
-		if ( $id && $this->owns_attachment( $id, $user_id ) && $this->is_uploads_file( get_attached_file( $id, true ) ) && $this->attachment_url( $id, $this->get_size() ) ) {
+		$id   = $this->validate_attachment_id( $this->read_value( $user_id, self::MIGRATED_USER_META, '' ) );
+		$file = $id ? get_attached_file( $id, true ) : '';
+		$meta = $id ? wp_get_attachment_metadata( $id, true ) : array();
+		if ( $id && $this->owns_attachment( $id, $user_id ) && $this->is_uploads_file( $file ) && ( ! metadata_exists( 'post', $id, self::SQUARE_VERSION_META ) || $this->valid_square( $file, $meta['sizes']['zmai-avatar'] ?? null ) ) && $this->attachment_url( $id, $this->get_size() ) ) {
 			$result = $cleanup ? $this->cleanup_owned( $user_id, $id ) : true;
 			return is_wp_error( $result ) ? $result : array(
 				'status'        => 'already_present',
@@ -402,7 +507,11 @@ final class Image_Store {
 		$uploads = wp_upload_dir();
 		$root    = realpath( $uploads['basedir'] );
 		$real    = realpath( $path );
-		return ! $uploads['error'] && $root && $real && 0 === strpos( $real, $root . DIRECTORY_SEPARATOR ) && is_file( $real ) && is_readable( $real );
+		if ( $uploads['error'] || ! $root || ! $real || 0 !== strpos( $real, $root . DIRECTORY_SEPARATOR ) || ! is_file( $real ) || ! is_readable( $real ) ) {
+			return false;
+		}
+		$relative = substr( $real, strlen( $root ) + 1 );
+		return ! ( is_multisite() && is_main_site() && 0 === strpos( $relative, 'sites' . DIRECTORY_SEPARATOR ) );
 	}
 
 	/**
@@ -436,8 +545,10 @@ final class Image_Store {
 	 * @param int    $user_id Owner, zero for default.
 	 * @param string $mime Validated input MIME; format conversion is not permitted.
 	 * @return true|WP_Error
+	 * @throws \Throwable When a metadata operation reports a database failure.
 	 */
 	private function prepare_attachment( $id, $user_id, $mime ) {
+		global $wpdb;
 		if ( ! wp_attachment_is_image( $id ) || ! $this->owns_attachment( $id, $user_id ) ) {
 			return $this->storage_error();
 		}
@@ -463,6 +574,16 @@ final class Image_Store {
 			$this->lock->mark_mutation();
 			$saved = $processor->create_square( $file, $this->get_size() );
 			if ( is_wp_error( $saved ) ) {
+				$data = $saved->get_error_data();
+				if ( is_array( $data ) && ! empty( $data['cleanup_files'] ) ) {
+					foreach ( $data['cleanup_files'] as $index => $filename ) {
+						$meta['sizes'][ 'zmai-avatar-failed-' . $index ] = array( 'file' => $filename );
+					}
+					wp_update_attachment_metadata( $id, $meta );
+					if ( ! $this->confirm_post_meta( $id, '_wp_attachment_metadata', $meta ) ) {
+						return $this->storage_error( true );
+					}
+				}
 				return $saved;
 			}
 			if ( is_array( $square ) ) {
@@ -476,18 +597,35 @@ final class Image_Store {
 				'filesize'  => $saved['filesize'],
 			);
 			$this->lock->mark_mutation();
-			wp_update_attachment_metadata( $id, $meta );
-			if ( ! $this->confirm_post_meta( $id, '_wp_attachment_metadata', $meta ) ) {
+			$failed = false;
+			try {
+				wp_update_attachment_metadata( $id, $meta );
+			} catch ( \Throwable $error ) {
+				if ( $wpdb->last_error ) {
+					throw $error;
+				}
+				$failed = true;
+			}
+			$confirmed = $this->confirm_post_meta( $id, '_wp_attachment_metadata', $meta );
+			if ( $failed || ! $confirmed ) {
 				wp_delete_file( $saved['path'] );
 				clearstatcache( true, $saved['path'] );
-				return $this->storage_error( is_file( $saved['path'] ) );
+				return $this->storage_error( is_file( $saved['path'] ) && ! $confirmed );
 			}
 		}
 		if ( ! $this->confirm_post_meta( $id, '_wp_attachment_metadata', $meta ) || ! $this->valid_square( $file, $meta['sizes']['zmai-avatar'], $target, $original['type'] ) ) {
 			return $this->storage_error();
 		}
 		$this->lock->mark_mutation();
-		update_post_meta( $id, self::SQUARE_VERSION_META, 1 );
+		try {
+			update_post_meta( $id, self::SQUARE_VERSION_META, 1 );
+		} catch ( \Throwable $error ) {
+			if ( $wpdb->last_error ) {
+				throw $error;
+			}
+			$this->confirm_post_meta( $id, self::SQUARE_VERSION_META, 1 );
+			return $this->storage_error();
+		}
 		return $this->confirm_post_meta( $id, self::SQUARE_VERSION_META, 1 ) ? true : $this->storage_error();
 	}
 
@@ -538,17 +676,19 @@ final class Image_Store {
 	 * @return string
 	 */
 	private function attachment_url( $id, $size ) {
-		if ( ! metadata_exists( 'post', $id, self::SQUARE_VERSION_META ) ) {
-			$url = wp_get_attachment_image_url( $id, array( $size, $size ) );
-			return $url ? $url : '';
+		$meta   = wp_get_attachment_metadata( $id );
+		$marker = get_post_meta( $id, self::SQUARE_VERSION_META, true );
+		$key    = get_current_blog_id() . ':' . $id . ':' . $size . ':' . md5( maybe_serialize( array( $marker, $meta ) ) );
+		if ( array_key_exists( $key, self::$attachment_urls ) ) {
+			return self::$attachment_urls[ $key ];
 		}
-		$file = get_attached_file( $id, true );
-		$meta = wp_get_attachment_metadata( $id, true );
-		if ( '1' !== get_post_meta( $id, self::SQUARE_VERSION_META, true ) || ! $file || ! isset( $meta['sizes']['zmai-avatar'] ) || ! $this->valid_square( $file, $meta['sizes']['zmai-avatar'] ) ) {
-			return '';
-		}
-		$url = wp_get_attachment_image_url( $id, 'zmai-avatar' );
-		return $url && basename( wp_parse_url( $url, PHP_URL_PATH ) ) === $meta['sizes']['zmai-avatar']['file'] ? $url : '';
+		$square                        = $meta['sizes']['zmai-avatar'] ?? null;
+		$width                         = $square['width'] ?? 0;
+		$height                        = $square['height'] ?? 0;
+		$named                         = '1' === $marker && is_array( $square ) && ! empty( $square['file'] ) && is_string( $square['file'] ) && basename( $square['file'] ) === $square['file'] && is_int( $width ) && $width > 0 && $width === $height;
+		$url                           = wp_get_attachment_image_url( $id, $named ? 'zmai-avatar' : array( $size, $size ) );
+		self::$attachment_urls[ $key ] = $url ? $url : '';
+		return self::$attachment_urls[ $key ];
 	}
 
 	/**
@@ -651,6 +791,7 @@ final class Image_Store {
 	 */
 	public function write_value( $user_id, $meta_key, $option_key, $value ) {
 		global $wpdb;
+		self::$attachment_urls = array();
 		$this->lock->mark_mutation();
 		if ( $user_id ) {
 			$key = self::user_meta_key( $meta_key );

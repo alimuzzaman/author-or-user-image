@@ -95,11 +95,24 @@ error even when the new mapping is already present.
 New uploads/imports confirm `sizes['zmai-avatar']` and
 `_zmai_avatar_square_version=1` before publishing their mapping. Include that
 square file in recovery inventory along with the effective original, retained
-original and other recorded sizes. A lost marked square does not fall back to
-the uncropped original. Existing unmarked media keeps its historical rendering.
-Known failed metadata writes remove the generated square; uncertain writes or
-failed physical rollback retain the owner fence. Generated upload/import names
+original and other recorded sizes. Rendering trusts square metadata and does
+not inspect local files, so offloaded or recompressed media keeps its URL.
+Missing square metadata uses the historical attachment URL behavior. Writes
+still validate local files before publishing a mapping.
+Known failed metadata writes remove the generated square; unconfirmed database
+writes or lost database file inventory retain the owner fence. Generated upload/import names
 prevent a missing historical original from sharing the replacement's path.
+
+Avatar processing pins the input format only during its own editor/core-media
+calls, then removes that temporary filter. Ordinary editor errors and caught
+editor exceptions clean known output files and release the owner lock. A
+changed output extension alone is not an uncertain database state. A failed
+authoritative database read after mutation, an exception during a database
+mutation whose result cannot be reconciled, failed exact-token release, or a
+deleted attachment row with retained files still requires operator recovery.
+Private import copies use local cleanup even if a media deletion filter refuses
+them. Their cleanup never replaces an in-flight result with a database recovery
+error from a `finally` block.
 
 Self-upload policy and the site-scoped `_zmai_avatar_upload_rate` record are
 checked under the same owner lock before image decoding. Counters store only
@@ -109,7 +122,20 @@ default lock and no user counter. Removal, moderation and erasure are not
 throttled. Privacy/account cleanup deletes the scoped counter while privacy's
 explicit zero keeps source data from recreating the avatar. Opted-in uninstall
 also removes `zmai_upload_policy` and the reserved `zmai_import_job` option.
-The phase 2 importer coordinator and front-end forms are separate work.
+The explicit importer distinguishes deterministic source/validation skips from
+temporary lock and persistence failures. A skip-only sweep completes. The job
+stores at most 100 skipped user IDs and fixed reason codes, displayed on
+Users > Import avatars. Counts include skips beyond that cap. Restore or repair
+source files locally, then start a new import; successful existing mappings
+remain untouched. No source paths or URLs are retained in the job.
+
+Temporary failures end in `paused_with_failures`; Retry repaired sources starts
+a new sweep. A paused or paused-with-failures job can instead be ended with
+Finish this import. This is a POST guarded by manage_options, current site,
+operation/job nonce and revision under the migration mutex. It preserves counts
+and skips, clears operational cursors and permits a new source. It never clears
+owner/coordinator locks or bypasses `recovery_required`. Stop a running job first
+to expose the finish action. A new job replaces the prior bounded skip list.
 
 ## Network activation and size
 

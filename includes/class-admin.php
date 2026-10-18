@@ -172,7 +172,7 @@ final class Admin {
 	 */
 	private function render_upload_form( $field, $is_default ) {
 		?>
-		<form class="zmai-form" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data">
+		<form class="zmai-form" method="post" action="<?php echo esc_url( add_query_arg( 'action', 'zmai_save_avatar', admin_url( 'admin-post.php' ) ) ); ?>" enctype="multipart/form-data">
 			<input type="hidden" name="action" value="zmai_save_avatar">
 			<input type="hidden" name="avatar_type" value="<?php echo $is_default ? 'default' : 'user'; ?>">
 			<?php wp_nonce_field( 'zmai_save_avatar' ); ?>
@@ -207,6 +207,7 @@ final class Admin {
 	 * @return void
 	 */
 	public function save_avatar() {
+		$this->reject_oversized_upload();
 		$type = $this->validate_avatar_request( 'zmai_save_avatar' );
 
 		$user_id = get_current_user_id();
@@ -252,9 +253,33 @@ final class Admin {
 		}
 
 		if ( is_wp_error( $result ) ) {
-			$this->redirect( 'upload-error', $result->get_error_message() );
+			$this->redirect( 'remove-error', $result->get_error_message() );
 		}
 		$this->redirect( 'removed' );
+	}
+
+	/**
+	 * Refuse a body PHP discarded before nonce validation, without changing data.
+	 * Upload form URLs retain their action and safe return hint when POST is empty.
+	 *
+	 * @return void
+	 */
+	private function reject_oversized_upload() {
+		$limit  = wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) );
+		$length = isset( $_SERVER['CONTENT_LENGTH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['CONTENT_LENGTH'] ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Only detect PHP's discarded body; no submitted data is processed and no state is changed.
+		if ( ! current_user_can( 'read' ) || ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] || $_POST || $_FILES || $limit <= 0 || ! ctype_digit( $length ) || (float) $length <= $limit ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- PHP discarded the nonce with the oversized body. This branch only redirects a refused request and never mutates data.
+		$front = isset( $_GET['zmai_context'] ) && 'front' === $_GET['zmai_context'];
+		if ( $front ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Refusal only; strict same-origin/path validation follows.
+			$return = isset( $_GET['zmai_return'] ) ? wp_unslash( $_GET['zmai_return'] ) : '';
+			wp_safe_redirect( add_query_arg( 'zmai_status', 'upload-too-large', Front_End::safe_return_url( $return ) ), 303 );
+			exit;
+		}
+		$this->redirect( 'upload-error', __( 'The upload exceeds the server request limit. Choose a smaller image.', 'author-or-user-image' ) );
 	}
 
 	/**
@@ -577,8 +602,12 @@ final class Admin {
 	 * @return void
 	 */
 	public function policy_notice() {
+		$screen = get_current_screen();
+		if ( ! current_user_can( 'manage_options' ) || ! $screen || ! in_array( $screen->id, array( 'users_page_author-or-user-image', 'users_page_author-or-user-image-manage' ), true ) ) {
+			return;
+		}
 		$policy = $this->policy->get_policy();
-		if ( current_user_can( 'manage_options' ) && 'invalid' === $policy['mode'] ) {
+		if ( 'invalid' === $policy['mode'] ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Author or User Image: the upload policy is invalid. Save a valid policy in Avatar Management settings to enable uploads.', 'author-or-user-image' ) . '</p></div>';
 		}
 	}
@@ -601,7 +630,7 @@ final class Admin {
 
 		if ( 'operation-error' === $status ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'The requested changes did not all complete. Avatar data may be busy or need administrator recovery. Please retry.', 'author-or-user-image' ) . '</p></div>';
-		} elseif ( 'upload-error' === $status && $error ) {
+		} elseif ( in_array( $status, array( 'upload-error', 'remove-error' ), true ) && $error ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $error ) . '</p></div>';
 		} elseif ( isset( $map[ $status ] ) ) {
 			$class = 'nothing-selected' === $status ? 'notice-warning' : 'notice-success';

@@ -99,7 +99,7 @@ $newid = is_wp_error( $import ) ? 0 : $import['attachment_id'];
 $newmeta = wp_get_attachment_metadata( $newid );
 $new_square = $newid ? dirname( get_attached_file( $newid ) ) . '/' . $newmeta['sizes']['zmai-avatar']['file'] : '';
 if ( $new_square ) { wp_delete_file( $new_square ); }
-p1_check( '' === $store->get_url( $uid, 1024, false ), 'lost new square never falls back to rectangular full image' );
+p1_check( basename( $new_square ) === basename( wp_parse_url( $store->get_url( $uid, 1024, false ), PHP_URL_PATH ) ), 'offloaded square keeps its metadata URL without falling back to rectangular full image' );
 $repaired = $store->import_local_image( $resolve, $uid );
 p1_check( ! is_wp_error( $repaired ) && 'imported' === $repaired['status'] && ! get_post( $newid ), 'invalid migrated fallback is repaired and old owned media cleaned' );
 $store->delete_user_avatar( $uid );

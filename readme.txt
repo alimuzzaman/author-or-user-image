@@ -93,7 +93,7 @@ Place the block or shortcode as standalone content. Nesting it inside another fo
 
 = Do I need to exclude form pages from caching? =
 
-Yes. The form is personal to each signed-in visitor, so a full-page cache must not serve it to anyone else. Exclude every page that contains the block or shortcode from full-page caching, in your caching plugin or on your host. The plugin sends no-cache headers and sets DONOTCACHEPAGE where it can. A cache that answers before WordPress runs ignores both, so the exclusion has to be made in that cache.
+Yes. The form is personal to each signed-in visitor, so a full-page cache must not serve it to anyone else. Exclude every page that contains the block or shortcode from full-page caching, including forms placed in widgets or templates. For signed-in visitors, the plugin sends early no-cache headers when the queried content contains the block or shortcode. Rendering a form also sets DONOTCACHEPAGE and sends headers if they are still available. Other pages keep their normal cache behavior. A cache that answers before WordPress runs ignores these signals, so configure the exclusion in that cache.
 
 = Can a login or security plugin block the upload form? =
 
@@ -123,7 +123,7 @@ A user who already has an imported avatar is skipped by later runs, so the first
 
 Upload settings do not stop an administrator's import. Individual blocks still do.
 
-Missing, offloaded, or malformed files are skipped and reported. Restore missing or offloaded files locally, then choose Retry repaired sources.
+Missing, offloaded, malformed, oversized, animated, and unsupported files are permanent skips for that sweep. A sweep with only these skips finishes. The screen lists up to 100 skipped user IDs and reason codes so you can repair their source files, then start a new import. Counts include every skipped user. Temporary lock or persistence failures pause the job; choose Retry repaired sources after resolving them. A paused job also offers Finish this import, which retains its results and lets you start another source. It does not clear recovery locks or undo imported avatars.
 
 = Which avatar plugins can the importer read? =
 
@@ -142,7 +142,7 @@ Source plugins can keep overriding avatars while they are active. Review the res
 
 On multisite, each site imports only its own users and local media. A shared avatar that came from another site needs its source file restored by hand. There is no network-wide or cross-site import.
 
-The importer does not migrate source settings or ratings, sync avatars across a network, import remote files, or keep a per-user log, source URL, or file path.
+The importer does not migrate source settings or ratings, sync avatars across a network, or import remote files. The bounded skip list contains user IDs and fixed reason codes only; it stores no source URL or file path and is replaced when you start a new job.
 
 == Screenshots ==
 

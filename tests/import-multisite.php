@@ -63,4 +63,43 @@ try {
 	}
 	zmai_it_cleanup();
 }
+// B2: a main-site source without a site ID must not resolve into another site's uploads/sites/N subtree.
+$b2_main       = (int) get_main_site_id();
+$b2_user       = zmai_it_user();
+$b2_foreign    = 0;
+$b2_attachment = 0;
+try {
+	$blog = wpmu_create_blog( $network->domain, trailingslashit( $network->path ) . 'b2-' . substr( wp_generate_uuid4(), 0, 8 ) . '/', 'Importer B2 fixture', 1, array( 'public' => 0 ), $network->id );
+	if ( is_wp_error( $blog ) ) { throw new RuntimeException( 'Could not create B2 subsite.' ); }
+	$b2_foreign = (int) $blog;
+	switch_to_blog( $b2_foreign );
+	$b2_file = zmai_it_file();
+	restore_current_blog();
+	switch_to_blog( $b2_main );
+	zmai_it_check( is_main_site(), 'B2 fixture runs on the main site' );
+	$b2_root = zmai_it_file();
+	update_user_meta( $b2_user, 'wp_user_avatars', array( 'full' => $b2_file['url'] ) );
+	$b2_url = $sources->resolve( 'wp-user-avatars', $b2_user );
+	zmai_it_check( is_wp_error( $b2_url ) && 'zmai_import_other_site' === $b2_url->get_error_code(), 'main-site URL without site ID under another uploads/sites subtree is other_site' );
+	$b2_attachment = (int) wp_insert_attachment( array( 'post_mime_type' => 'image/png', 'post_status' => 'inherit', 'post_title' => 'B2 foreign path', 'post_author' => 1 ), $b2_file['path'] );
+	update_user_meta( $b2_user, $wpdb->get_blog_prefix() . 'user_avatar', $b2_attachment );
+	$b2_path = $sources->resolve( 'one-user-avatar', $b2_user );
+	zmai_it_check( is_wp_error( $b2_path ) && 'zmai_import_other_site' === $b2_path->get_error_code(), 'main-site attachment path under another uploads/sites subtree is other_site' );
+	update_user_meta( $b2_user, 'wp_user_avatars', array( 'full' => $b2_root['url'] ) );
+	$b2_root_result = $sources->resolve( 'wp-user-avatars', $b2_user );
+	zmai_it_check( ! is_wp_error( $b2_root_result ) && realpath( $b2_root['path'] ) === $b2_root_result['path'], 'main-site root uploads URL still resolves' );
+	restore_current_blog();
+	switch_to_blog( $b2_foreign );
+	update_user_meta( $b2_user, 'wp_user_avatars', array( 'full' => $b2_file['url'] ) );
+	$b2_own = $sources->resolve( 'wp-user-avatars', $b2_user );
+	zmai_it_check( ! is_wp_error( $b2_own ) && realpath( $b2_file['path'] ) === $b2_own['path'], 'subsite URL under its own uploads subtree still resolves' );
+	restore_current_blog();
+} finally {
+	while ( ms_is_switched() ) { restore_current_blog(); }
+	if ( $b2_attachment ) { wp_delete_attachment( $b2_attachment, true ); }
+	if ( $b2_foreign ) { wpmu_delete_blog( $b2_foreign, true ); }
+	wpmu_delete_user( $b2_user );
+	if ( isset( $b2_file ) ) { wp_delete_file( $b2_file['path'] ); }
+	if ( isset( $b2_root ) ) { wp_delete_file( $b2_root['path'] ); }
+}
 zmai_it_done();

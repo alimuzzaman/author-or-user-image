@@ -180,6 +180,52 @@ zmai_policy_expect( ! $zmai_policy->can_upload_fresh( $zmai_policy_custom_user )
 zmai_policy_add_role( $zmai_policy_custom, array( 'read' => true ) );
 zmai_policy_expect( $zmai_policy->can_upload_fresh( $zmai_policy_custom_user ), 'recreating the same role slug restores its match' );
 
+// A4: role decisions read the in-memory role table, so a role absent from the database option still counts.
+$zmai_policy_virtual      = 'zmai_policy_virtual_' . $zmai_policy_suffix;
+$zmai_policy_virtual_def  = array( 'name' => 'ZMAI policy virtual', 'capabilities' => array( 'read' => true ) );
+$zmai_policy_virtual_user = zmai_policy_user( 'subscriber', 'virtual' );
+update_user_meta( $zmai_policy_virtual_user, $wpdb->get_blog_prefix() . 'capabilities', array( $zmai_policy_virtual => true ) );
+$zmai_policy_roles_before  = wp_roles()->roles;
+$zmai_policy_global_before = isset( $GLOBALS['wp_user_roles'] ) ? $GLOBALS['wp_user_roles'] : null;
+try {
+	$GLOBALS['wp_user_roles'] = $zmai_policy_roles_before + array( $zmai_policy_virtual => $zmai_policy_virtual_def );
+	wp_roles()->for_site( get_current_blog_id() );
+	zmai_policy_expect( isset( wp_roles()->roles[ $zmai_policy_virtual ] ), 'fixture: the global wp_user_roles supplies the virtual role' );
+	zmai_policy_expect( true === $zmai_policy->save_policy( array( 'mode' => 'roles', 'roles' => array( $zmai_policy_virtual ) ) ), 'save_policy accepts a virtual role from the global wp_user_roles' );
+	zmai_policy_expect( $zmai_policy->can_upload_fresh( $zmai_policy_virtual_user ), 'the global wp_user_roles is authoritative without a database match' );
+} finally {
+	if ( null === $zmai_policy_global_before ) {
+		unset( $GLOBALS['wp_user_roles'] );
+	} else {
+		$GLOBALS['wp_user_roles'] = $zmai_policy_global_before;
+	}
+	wp_roles()->roles = $zmai_policy_roles_before;
+}
+
+$zmai_policy_roles_filter = 'pre_option_' . $wpdb->get_blog_prefix() . 'user_roles';
+try {
+	wp_roles()->roles[ $zmai_policy_virtual ] = $zmai_policy_virtual_def;
+	add_filter( $zmai_policy_roles_filter, '__return_empty_array' );
+	zmai_policy_expect( true === $zmai_policy->save_policy( array( 'mode' => 'roles', 'roles' => array( $zmai_policy_virtual ) ) ), 'save_policy accepts a virtual role while the roles option is filtered' );
+	zmai_policy_expect( $zmai_policy->can_upload_fresh( $zmai_policy_virtual_user ), 'a pre_option roles filter does not change the upload decision' );
+} finally {
+	remove_filter( $zmai_policy_roles_filter, '__return_empty_array' );
+	wp_roles()->roles = $zmai_policy_roles_before;
+}
+
+// Rendering must not invalidate the global user cache.
+$zmai_policy_clean_calls = 0;
+$zmai_policy_count_clean = static function () use ( &$zmai_policy_clean_calls ) {
+	++$zmai_policy_clean_calls;
+};
+$zmai_policy->save_policy( array( 'mode' => 'roles', 'roles' => array( $zmai_policy_custom ) ) );
+add_action( 'clean_user_cache', $zmai_policy_count_clean );
+$zmai_policy_changed = wp_cache_get_last_changed( 'users' );
+$zmai_policy->can_upload( $zmai_policy_custom_user );
+remove_action( 'clean_user_cache', $zmai_policy_count_clean );
+zmai_policy_expect( $zmai_policy_changed === wp_cache_get_last_changed( 'users' ), 'rendering can_upload leaves the user-query last_changed unchanged' );
+zmai_policy_expect( 0 === $zmai_policy_clean_calls, 'rendering can_upload does not call clean_user_cache' );
+
 if ( is_multisite() ) {
 $zmai_policy_network = get_network();
 $zmai_policy_site = wpmu_create_blog( $zmai_policy_network->domain, trailingslashit( $zmai_policy_network->path ) . $zmai_policy_prefix . '/', 'ZMAI policy fixture', get_current_user_id() );

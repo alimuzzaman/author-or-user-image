@@ -364,6 +364,9 @@ final class Import_Sources {
 		if ( '' === $relative || false !== strpos( $relative, '%' ) || preg_match( '/[\x00-\x1f\\\\]/', $relative ) || preg_match( '#(?:^|/)(?:\.|\.\.)(?:/|$)#', $relative ) || false !== strpos( $relative, '//' ) ) {
 			return $this->error( 'unsupported_source' );
 		}
+		if ( is_multisite() && is_main_site() && 0 === strpos( $relative, 'sites/' ) ) {
+			return $this->error( 'other_site' );
+		}
 		return $this->local_file( trailingslashit( $uploads['basedir'] ) . $relative );
 	}
 
@@ -388,6 +391,10 @@ final class Import_Sources {
 		}
 		if ( 0 !== strpos( $real, $root . DIRECTORY_SEPARATOR ) || ! is_file( $real ) || ! is_readable( $real ) ) {
 			return $this->error( 'unsupported_source' );
+		}
+		$relative = str_replace( DIRECTORY_SEPARATOR, '/', substr( $real, strlen( $root ) + 1 ) );
+		if ( is_multisite() && is_main_site() && 0 === strpos( $relative, 'sites/' ) ) {
+			return $this->error( 'other_site' );
 		}
 		return array(
 			'path' => $real,

@@ -50,7 +50,7 @@ try {
 	zmai_it_check( $paused === $still && 'paused' === $still['state'], 'pause prevents any further batch work' );
 	$job = $migration->resume_import( $paused['id'], $paused['revision'] );
 	for ( $n = 0; $n < 30 && 'running' === $job['state']; ++$n ) { $job = $migration->run_import_batch( $job['id'], $job['revision'] ); if ( is_wp_error( $job ) ) { throw new RuntimeException( $job->get_error_code() ); } }
-	zmai_it_check( 'paused_with_failures' === $job['state'] && $job['retry_needed'] && $job['counts']['failed'] >= 2, 'ordinary missing/busy owners end a bounded failed sweep' );
+	zmai_it_check( 'paused_with_failures' === $job['state'] && $job['retry_needed'] && $job['counts']['failed'] >= 1 && ( $job['counts']['skipped'] ?? 0 ) >= 1, 'busy owners pause with failures and missing owners are permanent skips' );
 	zmai_it_check( $store->get_user_attachment_id( $users[47] ) > 0 && 0 === $store->get_user_attachment_id( $bad_user ), 'failed early owners do not prevent later pages' );
 	zmai_it_check( $job['upper_user_id'] === $upper && 0 === $store->get_user_attachment_id( $late ), 'new users after snapshot wait for another explicit run' );
 	zmai_it_check( $job['counts']['blocked'] >= 1 && $job['counts']['suppressed'] >= 1, 'blocks and explicit zero retain separate counts' );

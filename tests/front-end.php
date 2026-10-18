@@ -952,16 +952,85 @@ function zmai_fe_late_styles() {
 	zmai_fe_expect( is_string( $second ) && false === strpos( $second, 'assets/css/front-end.css' ), 'a second late shortcode does not duplicate the stylesheet link' );
 }
 
-zmai_fe_run( 'registration' );
-zmai_fe_run( 'render_contract' );
-zmai_fe_run( 'parity' );
-zmai_fe_run( 'no_writes' );
-zmai_fe_run( 'notices' );
-zmai_fe_run( 'instances' );
-zmai_fe_run( 'return_urls' );
-zmai_fe_run( 'admin_handlers' );
-zmai_fe_run( 'late_styles' );
-zmai_fe_run( 'cleanup' );
+/** Count nocache header passes. */
+function zmai_fe_count_nocache( $headers ) {
+	global $zmai_fe_nocache;
+	++$zmai_fe_nocache;
+	return $headers;
+}
+
+/**
+ * One cache scenario, selected by ZMAI_FE_ONLY. Each runs alone in its own
+ * process, because DONOTCACHEPAGE cannot be undefined once a request sets it.
+ */
+function zmai_fe_cache() {
+	global $wp_query, $zmai_fe_nocache, $zmai_fe_scenario;
+	$cases = array(
+		'ordinary'     => array( true, 'Plain paragraph.', 'template' ),
+		'block'        => array( true, '<!-- wp:author-or-user-image/avatar-upload /-->', 'template' ),
+		'shortcode'    => array( true, '[author_or_user_image_upload]', 'template' ),
+		'guest_block'  => array( false, '<!-- wp:author-or-user-image/avatar-upload /-->', 'template' ),
+		'render_plain' => array( true, 'Plain paragraph.', 'render' ),
+		'render_guest' => array( false, 'Plain paragraph.', 'render' ),
+	);
+	if ( ! isset( $cases[ $zmai_fe_scenario ] ) ) {
+		zmai_fe_expect( false, 'known cache scenario: ' . $zmai_fe_scenario );
+		return;
+	}
+	list( $signed, $content, $mode ) = $cases[ $zmai_fe_scenario ];
+	$user                            = zmai_fe_user( 'subscriber', 'cache-' . $zmai_fe_scenario );
+	wp_set_current_user( $signed ? $user : 0 );
+	$post_id = wp_insert_post(
+		array(
+			'post_title'   => 'Front-end cache fixture',
+			'post_content' => $content,
+			'post_status'  => 'publish',
+			'post_author'  => $user,
+		)
+	);
+	$wp_query                    = new WP_Query();
+	$wp_query->queried_object    = get_post( $post_id );
+	$wp_query->queried_object_id = $post_id;
+	$zmai_fe_nocache             = 0;
+	add_filter( 'nocache_headers', 'zmai_fe_count_nocache' );
+	if ( 'render' === $mode ) {
+		// Widget or template placement: no template_redirect pass runs before this render.
+		$html = zmai_fe_render( array() );
+		zmai_fe_expect( is_string( $html ) && false !== strpos( $html, 'zmai-front-end' ), 'render placement ' . $zmai_fe_scenario . ' returns the form markup' );
+	} else {
+		$front = zmai_fe_front();
+		if ( null !== $front ) {
+			$front->prevent_cache();
+		}
+	}
+	remove_filter( 'nocache_headers', 'zmai_fe_count_nocache' );
+	wp_delete_post( $post_id, true );
+	$matches  = false !== strpos( $content, 'avatar-upload' ) || false !== strpos( $content, 'author_or_user_image_upload' );
+	$expected = $signed && ( 'render' === $mode || $matches );
+	zmai_fe_expect( defined( 'DONOTCACHEPAGE' ) === $expected, $zmai_fe_scenario . ': DONOTCACHEPAGE is ' . ( $expected ? 'set' : 'absent' ) );
+	zmai_fe_expect( ( $zmai_fe_nocache > 0 ) === $expected, $zmai_fe_scenario . ': nocache headers are ' . ( $expected ? 'sent' : 'not sent' ) );
+}
+
+global $zmai_fe_scenario;
+$zmai_fe_scenario = (string) getenv( 'ZMAI_FE_ONLY' );
+if ( '' !== $zmai_fe_scenario ) {
+	// Buffered so headers_sent() stays false until the scenario checks run.
+	ob_start();
+	zmai_fe_run( 'cache' );
+	zmai_fe_run( 'cleanup' );
+	echo ob_get_clean();
+} else {
+	zmai_fe_run( 'registration' );
+	zmai_fe_run( 'render_contract' );
+	zmai_fe_run( 'parity' );
+	zmai_fe_run( 'no_writes' );
+	zmai_fe_run( 'notices' );
+	zmai_fe_run( 'instances' );
+	zmai_fe_run( 'return_urls' );
+	zmai_fe_run( 'admin_handlers' );
+	zmai_fe_run( 'late_styles' );
+	zmai_fe_run( 'cleanup' );
+}
 
 global $zmai_fe_failures, $zmai_fe_checks;
 echo "\nSUMMARY zmai front-end checks: " . $zmai_fe_checks . ' run, ' . count( $zmai_fe_failures ) . " failed\n";

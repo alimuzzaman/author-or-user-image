@@ -86,7 +86,6 @@ final class Upload_Policy {
 			return false;
 		}
 		$user_id = (int) $user_id;
-		clean_user_cache( $user_id );
 		wp_cache_delete( $user_id, 'user_meta' );
 		if ( $this->store->is_blocked_fresh( $user_id ) ) {
 			return false;
@@ -101,7 +100,7 @@ final class Upload_Policy {
 		if ( ! is_array( $caps ) || count( array_unique( $rows ) ) > 1 ) {
 			return false;
 		}
-		$roles = $this->store->read_value( 0, '', $prefix . 'user_roles' );
+		$roles = wp_roles()->roles;
 		if ( ! is_array( $roles ) ) {
 			return false;
 		}
@@ -109,8 +108,9 @@ final class Upload_Policy {
 		if ( ! $user->exists() ) {
 			return false;
 		}
-		// Use uncached persisted inputs while retaining core capability filters and
-		// its legacy super-administrator read grant. No role capabilities are changed.
+		// Use uncached persisted user capabilities and the current site's role table, while
+		// retaining core capability filters and its legacy super-administrator read grant.
+		// No role capabilities are changed.
 		$user->caps    = $caps;
 		$user->roles   = array_values( array_intersect( array_keys( $roles ), array_keys( $caps ) ) );
 		$user->allcaps = array();
@@ -136,7 +136,8 @@ final class Upload_Policy {
 	 *
 	 * Accepts exactly {mode: 'legacy'|'roles', roles: string[]} and writes
 	 * {schema: 1, mode: string, roles: string[]} as a nonautoloaded site option.
-	 * The caller owns POST, capability, and nonce authorization.
+	 * Roles are checked against the current site's role table. The caller owns
+	 * POST, capability, and nonce authorization.
 	 *
 	 * @param mixed $input Submitted policy fields.
 	 * @return true|WP_Error True after checked persistence, or a validation/storage error.
@@ -146,7 +147,7 @@ final class Upload_Policy {
 			return new WP_Error( 'zmai_invalid_policy', __( 'Choose a valid upload policy and known site roles.', 'author-or-user-image' ) );
 		}
 		global $wpdb;
-		$known = $this->store->read_value( 0, '', $wpdb->get_blog_prefix() . 'user_roles' );
+		$known = wp_roles()->roles;
 		if ( ! is_array( $known ) || array_diff( $input['roles'], array_keys( $known ) ) ) {
 			return new WP_Error( 'zmai_invalid_policy', __( 'Choose a valid upload policy and known site roles.', 'author-or-user-image' ) );
 		}

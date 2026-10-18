@@ -33,13 +33,14 @@
 		stopRequested = false;
 		var fields = new FormData(form);
 		var url = form.getAttribute('action');
-		root.querySelectorAll('button, select').forEach(function (control) { control.disabled = true; });
+		// Disable native submit inputs, buttons and the source selection during the run.
+		root.querySelectorAll('button, input[type="submit"], select').forEach(function (control) { control.disabled = true; });
 		stopButton = document.createElement('button');
 		stopButton.type = 'button';
 		stopButton.className = 'button';
 		// Reuse the translated native Stop label when present, otherwise its page text.
-		var nativeStop = root.querySelector('[data-zmai-operation="pause"] button');
-		stopButton.textContent = nativeStop ? nativeStop.textContent : root.getAttribute('data-stop-label');
+		var nativeStop = root.querySelector('[data-zmai-operation="pause"] input[type="submit"], [data-zmai-operation="pause"] button');
+		stopButton.textContent = nativeStop ? (nativeStop.value || nativeStop.textContent) : root.getAttribute('data-stop-label');
 		if (!stopButton.textContent) { stopButton.textContent = 'Stop'; }
 		stopButton.addEventListener('click', function () { stopRequested = true; stopButton.disabled = true; });
 		root.appendChild(stopButton);

@@ -11,6 +11,12 @@ defined( 'ABSPATH' ) || exit;
 
 /** Shares one native form between the block and shortcode. */
 final class Front_End {
+	/** Block name from blocks/avatar-upload/block.json. */
+	const BLOCK_NAME = 'author-or-user-image/avatar-upload';
+
+	/** Shortcode tag registered in register(). */
+	const SHORTCODE = 'author_or_user_image_upload';
+
 	/**
 	 * Avatar storage.
 	 *
@@ -51,21 +57,44 @@ final class Front_End {
 	}
 
 	/**
-	 * Personalized widgets can render late, so protect signed-in requests early.
+	 * Early no-cache headers for queried content that contains the upload block or shortcode.
 	 *
 	 * Page caches must also exclude pages containing these forms. A callback
 	 * cannot bypass a cache that served the request before WordPress loaded.
+	 * Other signed-in pages stay cacheable; rendered forms mark themselves.
 	 *
 	 * @return void
 	 */
 	public function prevent_cache() {
-		if ( is_user_logged_in() ) {
-			if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-				define( 'DONOTCACHEPAGE', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- This is the established page-cache interoperability constant.
-			}
-			if ( ! headers_sent() ) {
-				nocache_headers();
-			}
+		if ( is_user_logged_in() && self::queried_content_has_form() ) {
+			$this->mark_uncacheable();
+		}
+	}
+
+	/**
+	 * Whether the main query's post contains the block or shortcode.
+	 *
+	 * @return bool
+	 */
+	private static function queried_content_has_form() {
+		$post = get_queried_object();
+		if ( ! $post instanceof \WP_Post ) {
+			return false;
+		}
+		return has_block( self::BLOCK_NAME, $post->post_content ) || has_shortcode( $post->post_content, self::SHORTCODE );
+	}
+
+	/**
+	 * Mark the response uncacheable for page caches and send no-cache headers.
+	 *
+	 * @return void
+	 */
+	private function mark_uncacheable() {
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- This is the established page-cache interoperability constant.
+		}
+		if ( ! headers_sent() ) {
+			nocache_headers();
 		}
 	}
 
@@ -130,11 +159,13 @@ final class Front_End {
 	 */
 	public static function status_message( $status ) {
 		$messages = array(
-			'uploaded'     => __( 'The image was uploaded.', 'author-or-user-image' ),
-			'removed'      => __( 'The image was removed.', 'author-or-user-image' ),
-			'denied'       => __( 'Local avatar uploads are disabled for your account.', 'author-or-user-image' ),
-			'rate-limited' => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
-			'upload-error' => __( 'The image could not be saved. Check the file and try again. If the problem continues, contact an administrator.', 'author-or-user-image' ),
+			'uploaded'         => __( 'The image was uploaded.', 'author-or-user-image' ),
+			'removed'          => __( 'The image was removed.', 'author-or-user-image' ),
+			'denied'           => __( 'Local avatar uploads are disabled for your account.', 'author-or-user-image' ),
+			'rate-limited'     => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
+			'upload-error'     => __( 'The image could not be saved. Check the file and try again. If the problem continues, contact an administrator.', 'author-or-user-image' ),
+			'remove-error'     => __( 'The image could not be removed. Please retry. If the problem continues, contact an administrator.', 'author-or-user-image' ),
+			'upload-too-large' => __( 'The upload exceeds the server request limit. Choose a smaller image.', 'author-or-user-image' ),
 		);
 		return is_string( $status ) && isset( $messages[ $status ] ) ? $messages[ $status ] : '';
 	}
@@ -145,7 +176,10 @@ final class Front_End {
 	 * @return string Escaped form markup.
 	 */
 	public function render_form() {
-		$this->prevent_cache();
+		// Widgets and templates render after the early hook, so the form marks its own page.
+		if ( is_user_logged_in() ) {
+			$this->mark_uncacheable();
+		}
 		wp_enqueue_style( 'zmai-front-end' );
 		ob_start();
 		// Shortcodes in widgets/templates may run after the theme printed its head.
@@ -176,7 +210,20 @@ final class Front_End {
 			<?php if ( $this->store->is_blocked( $user_id ) ) : ?>
 				<p><?php esc_html_e( 'An administrator has disabled local avatar uploads for your account.', 'author-or-user-image' ); ?></p>
 			<?php elseif ( $this->policy->can_upload( $user_id ) ) : ?>
-				<form class="zmai-upload-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<form class="zmai-upload-form" method="post" enctype="multipart/form-data" action="
+				<?php
+				echo esc_url(
+					add_query_arg(
+						array(
+							'action'       => 'zmai_save_avatar',
+							'zmai_context' => 'front',
+							'zmai_return'  => $return,
+						),
+						admin_url( 'admin-post.php' )
+					)
+				);
+				?>
+																									">
 					<input type="hidden" name="action" value="zmai_save_avatar">
 					<input type="hidden" name="avatar_type" value="user">
 					<input type="hidden" name="zmai_context" value="front">

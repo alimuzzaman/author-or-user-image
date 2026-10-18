@@ -147,91 +147,101 @@ final class Image_Processor {
 			return self::error( 'zmai_jpeg_exif_unavailable', __( 'JPEG processing is unavailable because this server lacks EXIF support.', 'author-or-user-image' ) );
 		}
 
-		$directory      = dirname( $validated['path'] );
-		$real_directory = realpath( $directory );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Core image editors need a local writable output directory, not a remote filesystem transport.
-		if ( false === $real_directory || ! is_dir( $real_directory ) || ! is_writable( $real_directory ) ) {
-			return self::error( 'zmai_image_save_failed', __( 'The image could not be saved beside its source.', 'author-or-user-image' ) );
-		}
+		$output_path = '';
+		try {
+			$directory      = dirname( $validated['path'] );
+			$real_directory = realpath( $directory );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Core image editors need a local writable output directory, not a remote filesystem transport.
+			if ( false === $real_directory || ! is_dir( $real_directory ) || ! is_writable( $real_directory ) ) {
+				return self::error( 'zmai_image_save_failed', __( 'The image could not be saved beside its source.', 'author-or-user-image' ) );
+			}
 
-		$editor = wp_get_image_editor( $validated['path'], array( 'mime_type' => $validated['type'] ) );
-		if ( is_wp_error( $editor ) ) {
-			return self::error( 'zmai_image_editor', __( 'This image type cannot be processed by the available image editor.', 'author-or-user-image' ) );
-		}
+			$editor = wp_get_image_editor( $validated['path'], array( 'mime_type' => $validated['type'] ) );
+			if ( is_wp_error( $editor ) ) {
+				return self::error( 'zmai_image_editor', __( 'This image type cannot be processed by the available image editor.', 'author-or-user-image' ) );
+			}
 
-		$rotation = $editor->maybe_exif_rotate();
-		if ( is_wp_error( $rotation ) ) {
-			return self::error( 'zmai_image_editor', __( 'The image orientation could not be processed.', 'author-or-user-image' ) );
-		}
+			$rotation = $editor->maybe_exif_rotate();
+			if ( is_wp_error( $rotation ) ) {
+				return self::error( 'zmai_image_editor', __( 'The image orientation could not be processed.', 'author-or-user-image' ) );
+			}
 
-		$dimensions = $editor->get_size();
-		if ( ! is_array( $dimensions ) || empty( $dimensions['width'] ) || empty( $dimensions['height'] ) ) {
-			return self::error( 'zmai_image_editor', __( 'The image dimensions could not be read.', 'author-or-user-image' ) );
-		}
+			$dimensions = $editor->get_size();
+			if ( ! is_array( $dimensions ) || empty( $dimensions['width'] ) || empty( $dimensions['height'] ) ) {
+				return self::error( 'zmai_image_editor', __( 'The image dimensions could not be read.', 'author-or-user-image' ) );
+			}
 
-		$width       = (int) $dimensions['width'];
-		$height      = (int) $dimensions['height'];
-		$source_side = min( $width, $height );
-		$output_side = min( $size, $source_side );
-		$crop_x      = (int) floor( ( $width - $source_side ) / 2 );
-		$crop_y      = (int) floor( ( $height - $source_side ) / 2 );
-		$cropped     = $editor->crop( $crop_x, $crop_y, $source_side, $source_side, $output_side, $output_side, false );
-		if ( is_wp_error( $cropped ) || true !== $cropped ) {
-			return self::error( 'zmai_image_editor', __( 'The image could not be cropped.', 'author-or-user-image' ) );
-		}
+			$width       = (int) $dimensions['width'];
+			$height      = (int) $dimensions['height'];
+			$source_side = min( $width, $height );
+			$output_side = min( $size, $source_side );
+			$crop_x      = (int) floor( ( $width - $source_side ) / 2 );
+			$crop_y      = (int) floor( ( $height - $source_side ) / 2 );
+			$cropped     = $editor->crop( $crop_x, $crop_y, $source_side, $source_side, $output_side, $output_side, false );
+			if ( is_wp_error( $cropped ) || true !== $cropped ) {
+				return self::error( 'zmai_image_editor', __( 'The image could not be cropped.', 'author-or-user-image' ) );
+			}
 
-		$extension = self::extension_for_mime( $validated['type'] );
-		if ( ! $extension ) {
-			return self::error( 'zmai_invalid_image', __( 'The image type is not supported.', 'author-or-user-image' ) );
-		}
+			$extension = self::extension_for_mime( $validated['type'] );
+			if ( ! $extension ) {
+				return self::error( 'zmai_invalid_image', __( 'The image type is not supported.', 'author-or-user-image' ) );
+			}
 
-		$basename    = 'zmai-avatar-' . str_replace( '-', '', wp_generate_uuid4() ) . '.' . $extension;
-		$unique_name = wp_unique_filename( $real_directory, $basename );
-		$output_path = trailingslashit( $real_directory ) . $unique_name;
-		$saved       = $editor->save( $output_path, $validated['type'] );
-		if ( is_wp_error( $saved ) || ! is_array( $saved ) ) {
-			$removed = self::remove_file( $output_path );
-			return self::error( 'zmai_image_save_failed', __( 'The square image could not be saved.', 'author-or-user-image' ), $removed ? null : array( 'recovery' => true ) );
-		}
+			$basename    = 'zmai-avatar-' . str_replace( '-', '', wp_generate_uuid4() ) . '.' . $extension;
+			$unique_name = wp_unique_filename( $real_directory, $basename );
+			$output_path = trailingslashit( $real_directory ) . $unique_name;
+			// Keep this save in its validated format, without changing other media saves.
+			$pin_format = static function () {
+				return array();
+			};
+			add_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
+			try {
+				$saved = $editor->save( $output_path, $validated['type'] );
+			} finally {
+				remove_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
+			}
+			if ( is_wp_error( $saved ) || ! is_array( $saved ) ) {
+				return self::square_failure( $output_path, __( 'The square image could not be saved.', 'author-or-user-image' ) );
+			}
 
-		$saved_path = isset( $saved['path'] ) && is_string( $saved['path'] ) ? $saved['path'] : $output_path;
-		$real_saved = realpath( $saved_path );
-		if ( false === $real_saved || dirname( $real_saved ) !== $real_directory || basename( $real_saved ) !== $unique_name || ! self::is_regular_file( $real_saved ) ) {
-			$removed   = self::remove_file( $output_path );
-			$uncertain = $saved_path !== $output_path || ! $removed;
-			return self::error( 'zmai_image_save_failed', __( 'The saved image is outside its expected local directory.', 'author-or-user-image' ), $uncertain ? array( 'recovery' => true ) : null );
-		}
+			$saved_path = isset( $saved['path'] ) && is_string( $saved['path'] ) ? $saved['path'] : $output_path;
+			$real_saved = realpath( $saved_path );
+			if ( false === $real_saved || dirname( $real_saved ) !== $real_directory || basename( $real_saved ) !== $unique_name || ! self::is_regular_file( $real_saved ) ) {
+				return self::square_failure( $output_path, __( 'The saved image is outside its expected local directory.', 'author-or-user-image' ) );
+			}
 
-		clearstatcache( true, $real_saved );
-		$actual_size    = filesize( $real_saved );
-		$saved_info     = @getimagesize( $real_saved ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Partial editor writes are verified and removed below.
-		$actual_mime    = is_array( $saved_info ) && isset( $saved_info['mime'] ) ? $saved_info['mime'] : '';
-		$actual_width   = is_array( $saved_info ) && isset( $saved_info[0] ) ? (int) $saved_info[0] : 0;
-		$actual_height  = is_array( $saved_info ) && isset( $saved_info[1] ) ? (int) $saved_info[1] : 0;
-		$metadata_ok    = isset( $saved['width'], $saved['height'], $saved['mime-type'], $saved['filesize'] )
-			&& (int) $saved['width'] === $actual_width
-			&& (int) $saved['height'] === $actual_height
-			&& $saved['mime-type'] === $actual_mime
-			&& (int) $saved['filesize'] === $actual_size;
-		$orientation_ok = true;
-		if ( 'image/jpeg' === $actual_mime && function_exists( 'exif_read_data' ) ) {
-			$exif           = @exif_read_data( $real_saved ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Some valid JPEG encoders omit EXIF metadata.
-			$orientation_ok = empty( $exif['Orientation'] ) || 1 === (int) $exif['Orientation'];
-		}
+			clearstatcache( true, $real_saved );
+			$actual_size    = filesize( $real_saved );
+			$saved_info     = @getimagesize( $real_saved ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Partial editor writes are verified and removed below.
+			$actual_mime    = is_array( $saved_info ) && isset( $saved_info['mime'] ) ? $saved_info['mime'] : '';
+			$actual_width   = is_array( $saved_info ) && isset( $saved_info[0] ) ? (int) $saved_info[0] : 0;
+			$actual_height  = is_array( $saved_info ) && isset( $saved_info[1] ) ? (int) $saved_info[1] : 0;
+			$metadata_ok    = isset( $saved['width'], $saved['height'], $saved['mime-type'], $saved['filesize'] )
+				&& (int) $saved['width'] === $actual_width
+				&& (int) $saved['height'] === $actual_height
+				&& $saved['mime-type'] === $actual_mime
+				&& (int) $saved['filesize'] === $actual_size;
+			$orientation_ok = true;
+			if ( 'image/jpeg' === $actual_mime && function_exists( 'exif_read_data' ) ) {
+				$exif           = @exif_read_data( $real_saved ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Some valid JPEG encoders omit EXIF metadata.
+				$orientation_ok = empty( $exif['Orientation'] ) || 1 === (int) $exif['Orientation'];
+			}
 
-		if ( $actual_size < 1 || ! $metadata_ok || ! $orientation_ok || $actual_mime !== $validated['type'] || $actual_width !== $output_side || $actual_height !== $output_side ) {
-			$removed = self::remove_file( $output_path );
-			return self::error( 'zmai_image_save_failed', __( 'The saved square image failed its format, dimension, or metadata check.', 'author-or-user-image' ), $removed ? null : array( 'recovery' => true ) );
-		}
+			if ( $actual_size < 1 || ! $metadata_ok || ! $orientation_ok || $actual_mime !== $validated['type'] || $actual_width !== $output_side || $actual_height !== $output_side ) {
+				return self::square_failure( $output_path, __( 'The saved square image failed its format, dimension, or metadata check.', 'author-or-user-image' ) );
+			}
 
-		return array(
-			'path'      => $real_saved,
-			'file'      => basename( $real_saved ),
-			'width'     => $actual_width,
-			'height'    => $actual_height,
-			'mime-type' => $actual_mime,
-			'filesize'  => (int) $actual_size,
-		);
+			return array(
+				'path'      => $real_saved,
+				'file'      => basename( $real_saved ),
+				'width'     => $actual_width,
+				'height'    => $actual_height,
+				'mime-type' => $actual_mime,
+				'filesize'  => (int) $actual_size,
+			);
+		} catch ( \Throwable $error ) {
+			return self::square_failure( $output_path, __( 'The square image could not be processed or saved.', 'author-or-user-image' ) );
+		}
 	}
 
 	/**
@@ -429,6 +439,34 @@ final class Image_Processor {
 		wp_delete_file( $path );
 		clearstatcache( true, $path );
 		return ! file_exists( $path ) && ! is_link( $path );
+	}
+
+	/**
+	 * Reconcile only this generated UUID's output, including changed extensions.
+	 * Remaining basenames let the store journal inventory before its rollback.
+	 * No image-only failure claims an uncertain database state.
+	 *
+	 * @param string $path Generated destination, or empty before save.
+	 * @param string $message Safe failure message.
+	 * @return WP_Error
+	 */
+	private static function square_failure( $path, $message ) {
+		$remaining = array();
+		if ( $path ) {
+			$stem  = pathinfo( $path, PATHINFO_FILENAME );
+			$files = glob( dirname( $path ) . '/' . $stem . '.*' );
+			foreach ( is_array( $files ) ? $files : array( $path ) as $file ) {
+				try {
+					$removed = self::remove_file( $file );
+				} catch ( \Throwable $error ) {
+					$removed = false;
+				}
+				if ( ! $removed ) {
+					$remaining[] = basename( $file );
+				}
+			}
+		}
+		return self::error( 'zmai_image_save_failed', $message, $remaining ? array( 'cleanup_files' => $remaining ) : null );
 	}
 
 	/**

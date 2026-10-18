@@ -55,6 +55,30 @@ python3 /absolute/plugin/tests/lifecycle-concurrency.py \
 The release matrix and exact-package Plugin Check steps are in
 `docs/release-checklist.md`.
 
+The 3.1 review regressions run with the same candidate bootstrap and disposable
+single-site/multisite fixtures:
+
+```sh
+wp --path=/absolute/disposable/wordpress --require=/absolute/plugin/tests/candidate-bootstrap.php eval-file /absolute/plugin/tests/review-image-fixes.php
+wp --path=/absolute/disposable/wordpress --require=/absolute/plugin/tests/candidate-bootstrap.php eval-file /absolute/plugin/tests/review-media-errors.php
+wp --path=/absolute/disposable/wordpress --require=/absolute/plugin/tests/candidate-bootstrap.php eval-file /absolute/plugin/tests/review-import-fixes.php
+wp --path=/absolute/disposable/wordpress --require=/absolute/plugin/tests/candidate-bootstrap.php eval-file /absolute/plugin/tests/admin-review-fixes.php
+node /absolute/plugin/tests/import-controls.js
+```
+
+These cover scoped JPEG output-format pinning, offload/recompression URL
+rendering, editor/core staging faults, database recovery fences, bounded import
+skips and authenticated finish actions, oversized-body refusal, removal errors
+and native submit controls. Fault tests reconcile only their own synthetic
+owners and exact lock tokens. Never clear unrelated locks to make a test pass.
+The image suite uses `v3.1/fix1/fixtures-review` under the shared scratch root.
+
+Run `tests/front-end.php` separately with `ZMAI_FE_ONLY` set to each of
+`ordinary`, `block`, `shortcode`, `guest_block`, `render_plain`, and
+`render_guest`. Each scenario needs a fresh PHP process because
+`DONOTCACHEPAGE` cannot be undefined within a request. The normal suite does not
+replace these isolated cache checks.
+
 Run `wp eval-file /absolute/plugin/tests/migration-race.php --path=/absolute/disposable/wordpress`
 on both disposable single-site and multisite installations to exercise newer
 uploads and removals while a real legacy import is processing image metadata.

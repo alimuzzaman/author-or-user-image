@@ -107,7 +107,13 @@ final class Migration {
 			}
 			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize,WordPress.PHP.NoSilencedErrors.Discouraged -- Job data must never instantiate stored PHP objects.
 			$job = 1 === count( $rows ) && is_serialized( $rows[0] ) ? @unserialize( $rows[0], array( 'allowed_classes' => false ) ) : null;
-			return $this->valid_import_job( $job ) ? $job : $this->import_error( 'schema' );
+			if ( ! $this->valid_import_job( $job ) ) {
+				return $this->import_error( 'schema' );
+			}
+			// Older schema-1 jobs remain readable without a GET-time upgrade write.
+			$job['skips']             = $job['skips'] ?? array();
+			$job['counts']['skipped'] = $job['counts']['skipped'] ?? 0;
+			return $job;
 		} catch ( \Throwable $error ) {
 			return $this->store->storage_error();
 		}
@@ -157,6 +163,7 @@ final class Migration {
 					'retry_needed'    => false,
 					'counts'          => $this->import_counts(),
 					'last_error_code' => '',
+					'skips'           => array(),
 				);
 				return $this->save_import_job( $job );
 			}
@@ -191,13 +198,21 @@ final class Migration {
 					++$job['counts']['inspected'];
 					if ( is_wp_error( $result ) ) {
 						$code = $result->get_error_code();
+						$data = $result->get_error_data();
 						if ( in_array( $code, array( 'zmai_import_no_source', 'zmai_import_other_site' ), true ) ) {
 							++$job['counts'][ 'zmai_import_no_source' === $code ? 'no_source' : 'other_site' ];
+						} elseif ( ( ! is_array( $data ) || empty( $data['recovery'] ) ) && $this->permanent_import_reason( $code ) ) {
+							++$job['counts']['skipped'];
+							if ( count( $job['skips'] ) < 100 ) {
+								$job['skips'][] = array(
+									'user_id' => (int) $user_id,
+									'reason'  => $this->permanent_import_reason( $code ),
+								);
+							}
 						} else {
 							++$job['counts']['failed'];
 							$job['retry_needed']    = true;
 							$job['last_error_code'] = 'zmai_busy' === $code ? 'busy' : 'import_failed';
-							$data                   = $result->get_error_data();
 							if ( is_array( $data ) && ! empty( $data['recovery'] ) ) {
 								$job['state']           = 'recovery_required';
 								$job['last_error_code'] = 'recovery';
@@ -267,6 +282,17 @@ final class Migration {
 	}
 
 	/**
+	 * Finish a paused job without retrying or changing any owner or recovery lock.
+	 *
+	 * @param string $id Job UUID.
+	 * @param int    $revision Expected revision.
+	 * @return array|WP_Error
+	 */
+	public function finish_import( $id, $revision ) {
+		return $this->change_import_state( $id, $revision, 'finish' );
+	}
+
+	/**
 	 * Implement fixed transitions. A recovery state requires operator reconciliation.
 	 *
 	 * @param string $id Job UUID.
@@ -289,7 +315,14 @@ final class Migration {
 					$job['counts']          = $this->import_counts();
 					$job['retry_needed']    = false;
 					$job['last_error_code'] = '';
+					$job['skips']           = array();
 					++$job['sweep'];
+				} elseif ( 'finish' === $operation && in_array( $job['state'], array( 'paused', 'paused_with_failures' ), true ) ) {
+					$job['state']           = 'complete';
+					$job['last_user_id']    = 0;
+					$job['upper_user_id']   = 0;
+					$job['retry_needed']    = false;
+					$job['last_error_code'] = '';
 				} else {
 					return $job;
 				}
@@ -353,12 +386,38 @@ final class Migration {
 	}
 
 	/**
-	 * Fixed sweep counts contain no owner identifiers.
+	 * Fixed sweep counts; bounded skip records are stored separately.
 	 *
 	 * @return array<string,int>
 	 */
 	private function import_counts() {
-		return array_fill_keys( array( 'inspected', 'imported', 'existing', 'suppressed', 'blocked', 'no_source', 'other_site', 'failed' ), 0 );
+		return array_fill_keys( array( 'inspected', 'imported', 'existing', 'suppressed', 'blocked', 'no_source', 'other_site', 'failed', 'skipped' ), 0 );
+	}
+
+	/**
+	 * Deterministic source/validation errors need repair, not an automatic retry.
+	 *
+	 * @param string $code Typed error code.
+	 * @return string Fixed reason code, or empty for a transient failure.
+	 */
+	private function permanent_import_reason( $code ) {
+		$reasons = array(
+			'zmai_import_invalid_source'     => 'invalid_source',
+			'zmai_import_missing_file'       => 'missing_file',
+			'zmai_import_unsupported_source' => 'unsupported_source',
+			'zmai_import_path'               => 'invalid_source',
+			'zmai_invalid_source'            => 'invalid_source',
+			'zmai_invalid_image'             => 'invalid_image',
+			'zmai_upload_size'               => 'upload_size',
+			'zmai_animated_image'            => 'animated_image',
+			'zmai_invalid_image_container'   => 'invalid_image_container',
+			'zmai_invalid_dimensions'        => 'invalid_dimensions',
+			'zmai_jpeg_exif_unavailable'     => 'jpeg_exif_unavailable',
+			'zmai_image_editor'              => 'image_editor',
+			'zmai_image_format'              => 'image_format',
+			'zmai_source_changed'            => 'source_changed',
+		);
+		return $reasons[ $code ] ?? '';
 	}
 
 	/**
@@ -369,7 +428,7 @@ final class Migration {
 	 */
 	private function valid_import_job( $job ) {
 		$keys = array( 'schema', 'id', 'source', 'site_id', 'state', 'last_user_id', 'upper_user_id', 'sweep', 'revision', 'retry_needed', 'counts', 'last_error_code' );
-		if ( ! is_array( $job ) || count( $job ) !== count( $keys ) || array_diff( $keys, array_keys( $job ) ) ) {
+		if ( ! is_array( $job ) || array_diff( $keys, array_keys( $job ) ) || array_diff( array_keys( $job ), array_merge( $keys, array( 'skips' ) ) ) ) {
 			return false;
 		}
 		if ( 1 !== $job['schema'] || ! $this->import_uuid( $job['id'] ) || ! is_string( $job['source'] ) || ! isset( Import_Sources::registry()[ $job['source'] ] ) || get_current_blog_id() !== $job['site_id'] || ! in_array( $job['state'], array( 'running', 'paused', 'paused_with_failures', 'recovery_required', 'complete' ), true ) || ! is_bool( $job['retry_needed'] ) || ! in_array( $job['last_error_code'], array( '', 'busy', 'import_failed', 'recovery' ), true ) ) {
@@ -380,12 +439,26 @@ final class Migration {
 				return false;
 			}
 		}
-		if ( $job['last_user_id'] > $job['upper_user_id'] || ! is_array( $job['counts'] ) || array_keys( $this->import_counts() ) !== array_keys( $job['counts'] ) ) {
+		$counts = $this->import_counts();
+		if ( ! isset( $job['skips'] ) ) {
+			unset( $counts['skipped'] );
+		}
+		if ( $job['last_user_id'] > $job['upper_user_id'] || ! is_array( $job['counts'] ) || array_keys( $counts ) !== array_keys( $job['counts'] ) ) {
 			return false;
 		}
 		foreach ( $job['counts'] as $count ) {
 			if ( ! is_int( $count ) || $count < 0 ) {
 				return false;
+			}
+		}
+		if ( array_key_exists( 'skips', $job ) ) {
+			if ( ! is_array( $job['skips'] ) || count( $job['skips'] ) > 100 || ( $job['skips'] && array_keys( $job['skips'] ) !== range( 0, count( $job['skips'] ) - 1 ) ) || count( $job['skips'] ) > $job['counts']['skipped'] ) {
+				return false;
+			}
+			foreach ( $job['skips'] as $skip ) {
+				if ( ! is_array( $skip ) || 2 !== count( $skip ) || ! isset( $skip['user_id'], $skip['reason'] ) || ! is_int( $skip['user_id'] ) || $skip['user_id'] < 1 || ! is_string( $skip['reason'] ) || ( ! $this->permanent_import_reason( 'zmai_' . $skip['reason'] ) && ! $this->permanent_import_reason( 'zmai_import_' . $skip['reason'] ) ) ) {
+					return false;
+				}
 			}
 		}
 		return true;
