@@ -177,7 +177,7 @@ final class Admin {
 			<input type="hidden" name="avatar_type" value="<?php echo $is_default ? 'default' : 'user'; ?>">
 			<?php wp_nonce_field( 'zmai_save_avatar' ); ?>
 			<label for="<?php echo esc_attr( $field ); ?>"><?php esc_html_e( 'Choose an image', 'author-or-user-image' ); ?></label>
-			<p class="description"><?php esc_html_e( 'Use a JPEG, PNG or static WebP up to 4096 by 4096 pixels and the smaller of this site’s upload limit or 8 MiB. New avatars use a centered square without upscaling. Uncropped originals remain in the Media Library. JPEG processing requires server EXIF support.', 'author-or-user-image' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Use a JPEG, PNG or static WebP up to 4096 by 4096 pixels and the smaller of this site’s upload limit or 8 MiB. New avatars use a centered square without upscaling. Sanitized uncropped originals remain in the Media Library. New files remove photo metadata while retaining ICC color profiles. Previously uploaded originals keep metadata until re-uploaded. JPEG processing requires server EXIF support.', 'author-or-user-image' ); ?></p>
 			<input id="<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $field ); ?>" type="file" accept="image/jpeg,image/png,image/webp" required>
 			<?php submit_button( __( 'Upload image', 'author-or-user-image' ), 'primary', 'submit', false ); ?>
 		</form>
@@ -230,7 +230,7 @@ final class Admin {
 			if ( $this->is_front_request() && 'zmai_rate_limited' === $result->get_error_code() ) {
 				$this->redirect( 'rate-limited' );
 			}
-			$this->redirect( 'upload-error', $result->get_error_message() );
+			$this->redirect( 'upload-error', $result->get_error_code() );
 		}
 		$this->redirect( 'uploaded' );
 	}
@@ -253,7 +253,7 @@ final class Admin {
 		}
 
 		if ( is_wp_error( $result ) ) {
-			$this->redirect( 'remove-error', $result->get_error_message() );
+			$this->redirect( 'remove-error', $result->get_error_code() );
 		}
 		$this->redirect( 'removed' );
 	}
@@ -279,7 +279,7 @@ final class Admin {
 			wp_safe_redirect( add_query_arg( 'zmai_status', 'upload-too-large', Front_End::safe_return_url( $return ) ), 303 );
 			exit;
 		}
-		$this->redirect( 'upload-error', __( 'The upload exceeds the server request limit. Choose a smaller image.', 'author-or-user-image' ) );
+		$this->redirect( 'upload-error', 'zmai_upload_size' );
 	}
 
 	/**
@@ -550,7 +550,7 @@ final class Admin {
 				</tr>
 				<tr>
 					<th scope="row"><label for="zmai-avatar-size"><?php esc_html_e( 'Avatar image size', 'author-or-user-image' ); ?></label></th>
-					<td><input id="zmai-avatar-size" name="avatar_size" type="number" class="small-text" min="32" max="1024" value="<?php echo esc_attr( $this->store->get_size() ); ?>"> <span><?php esc_html_e( 'pixels square', 'author-or-user-image' ); ?></span><p class="description"><?php esc_html_e( 'New uploads receive a centered square at this maximum size, without upscaling. Existing avatars are not regenerated. Uncropped originals and their metadata remain available in the Media Library.', 'author-or-user-image' ); ?></p></td>
+					<td><input id="zmai-avatar-size" name="avatar_size" type="number" class="small-text" min="32" max="1024" value="<?php echo esc_attr( $this->store->get_size() ); ?>"> <span><?php esc_html_e( 'pixels square', 'author-or-user-image' ); ?></span><p class="description"><?php esc_html_e( 'New uploads receive a centered square at this maximum size, without upscaling. Existing avatars are not regenerated. Sanitized uncropped originals remain available in the Media Library. Previously uploaded originals keep metadata until re-uploaded.', 'author-or-user-image' ); ?></p></td>
 				</tr>
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Uninstall behavior', 'author-or-user-image' ); ?></th>
@@ -619,7 +619,7 @@ final class Admin {
 	 */
 	private function render_status_notice() {
 		$status = isset( $_GET['zmai_status'] ) ? sanitize_key( wp_unslash( $_GET['zmai_status'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only status value from a redirect.
-		$error  = isset( $_GET['zmai_error'] ) ? sanitize_text_field( wp_unslash( $_GET['zmai_error'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only status value from a redirect.
+		$error  = isset( $_GET['zmai_error'] ) ? sanitize_key( wp_unslash( $_GET['zmai_error'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only status value from a redirect.
 		$map    = array(
 			'uploaded'         => __( 'The image was uploaded.', 'author-or-user-image' ),
 			'removed'          => __( 'The image was removed.', 'author-or-user-image' ),
@@ -630,8 +630,18 @@ final class Admin {
 
 		if ( 'operation-error' === $status ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'The requested changes did not all complete. Avatar data may be busy or need administrator recovery. Please retry.', 'author-or-user-image' ) . '</p></div>';
-		} elseif ( in_array( $status, array( 'upload-error', 'remove-error' ), true ) && $error ) {
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $error ) . '</p></div>';
+		} elseif ( in_array( $status, array( 'upload-error', 'remove-error' ), true ) ) {
+			$errors  = array(
+				'zmai_invalid_image'      => __( 'Choose a JPEG, PNG, or static WebP image.', 'author-or-user-image' ),
+				'zmai_upload_size'        => __( 'The image exceeds this site’s upload limit. Choose a smaller image.', 'author-or-user-image' ),
+				'zmai_rate_limited'       => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
+				'zmai_blocked'            => __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ),
+				'zmai_metadata_failed'    => __( 'The image metadata could not be removed safely. Choose another image.', 'author-or-user-image' ),
+				'zmai_metadata_cmyk'      => __( 'This server cannot safely normalize this CMYK JPEG. Convert it to RGB and try again.', 'author-or-user-image' ),
+				'zmai_invalid_dimensions' => __( 'Choose an image no larger than 4096 by 4096 pixels.', 'author-or-user-image' ),
+			);
+			$message = $errors[ $error ] ?? __( 'The image change could not be completed. Please try again or contact an administrator.', 'author-or-user-image' );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
 		} elseif ( isset( $map[ $status ] ) ) {
 			$class = 'nothing-selected' === $status ? 'notice-warning' : 'notice-success';
 			echo '<div class="notice ' . esc_attr( $class ) . ' is-dismissible"><p>' . esc_html( $map[ $status ] ) . '</p></div>';
@@ -642,7 +652,7 @@ final class Admin {
 	 * Redirect to the self-service page.
 	 *
 	 * @param string $status Status code.
-	 * @param string $error  Optional safe error text.
+	 * @param string $error  Optional typed error code.
 	 * @return void
 	 */
 	private function redirect( $status, $error = '' ) {
@@ -658,7 +668,7 @@ final class Admin {
 			'zmai_status' => sanitize_key( $status ),
 		);
 		if ( $error ) {
-			$args['zmai_error'] = sanitize_text_field( $error );
+			$args['zmai_error'] = sanitize_key( $error );
 		}
 
 		wp_safe_redirect( add_query_arg( $args, admin_url( 'users.php' ) ) );

@@ -185,7 +185,7 @@ try {
 	// 3. Busy owners pause with failures; only an authenticated operation-nonce finish completes them.
 	delete_option( 'zmai_import_job' );
 	$busy_user = zmai_it_user();
-	update_user_meta( $busy_user, 'wp_user_avatars', array( 'full' => zmai_it_file()['url'] ) );
+	update_user_meta( $busy_user, 'wp_user_avatars', array( 'full' => zmai_it_owned_file()['url'] ) );
 	$busy   = $store->get_lock()->acquire_lock( 'zmai_avatar_lock_user_' . $busy_user );
 	$paused = zmai_rv_job( zmai_rv_drain( $migration, $migration->start_import( $source, wp_generate_uuid4(), 0 ) ) );
 	zmai_it_check( 'paused_with_failures' === ( $paused['state'] ?? '' ) && true === ( $paused['retry_needed'] ?? false ) && ( $paused['counts']['failed'] ?? 0 ) >= 1, 'busy owner pauses the sweep with a retryable failure' );
@@ -214,6 +214,18 @@ try {
 	$after    = zmai_rv_job( $migration->import_status() );
 	zmai_it_check( ! is_wp_error( $finished ) && 'complete' === ( $after['state'] ?? '' ), 'authenticated finish with the current revision completes the paused job' );
 	zmai_it_check( ( $after['counts'] ?? null ) === ( $paused['counts'] ?? array() ) && ( $after['skips'] ?? array() ) === ( $paused['skips'] ?? array() ), 'finish preserves counts and skip records' );
+	// 3b. Replaying Finish or Resume after success is a no-op, with the stale and the current revision.
+	$replayed = $migration->import_status();
+	foreach ( array( 'finish', 'resume' ) as $replay ) {
+		foreach ( array( (string) ( $paused['revision'] ?? 0 ), (string) ( $after['revision'] ?? 0 ) ) as $replay_revision ) {
+			$replay_req             = $request;
+			$replay_req['revision'] = $replay_revision;
+			$replay_req['_wpnonce'] = wp_create_nonce( 'zmai_import_' . $replay . '_' . ( $paused['id'] ?? '' ) );
+			$replay_result = $controller->process_request( $replay, $replay_req, 'POST' );
+			zmai_it_check( ! is_wp_error( $replay_result ) && $replayed === $migration->import_status(), $replay . ' replay dispatches with purpose nonce and preserves completed job at revision ' . $replay_revision );
+		}
+	}
+	zmai_it_check( $replayed === $migration->import_status(), 'stale and current Finish/Resume replays after success are no-ops' );
 	$next = $migration->start_import( 'one-user-avatar', wp_generate_uuid4(), (int) ( $after['revision'] ?? 0 ) );
 	zmai_it_check( is_array( $next ) && 'running' === ( $next['state'] ?? '' ) && 'one-user-avatar' === ( $next['source'] ?? '' ), 'a new source starts after the paused job is finished' );
 	$store->get_lock()->release_lock( $busy );

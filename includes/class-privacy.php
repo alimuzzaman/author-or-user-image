@@ -53,7 +53,7 @@ final class Privacy {
 
 		wp_add_privacy_policy_content(
 			__( 'Author or User Image', 'author-or-user-image' ),
-			'<p>' . esc_html__( 'This plugin stores profile avatar images in this site’s WordPress Media Library. It may process the user ID, avatar attachment ID, avatar URL, blocked-upload setting, and short upload-attempt counters and reset times for the relevant account. Center cropping retains the uncropped original and its metadata in the Media Library. The plugin does not send this data to an external service.', 'author-or-user-image' ) . '</p>'
+			'<p>' . esc_html__( 'This plugin stores profile avatar images in this site’s WordPress Media Library. It may process the user ID, avatar attachment ID, avatar URL, blocked-upload setting, and short upload-attempt counters and reset times for the relevant account. Center cropping retains the uncropped image in the Media Library. New uploads and migration copies remove descriptive photo metadata by default while retaining ICC color profiles. Trusted site PHP can opt out. Earlier uploads keep their metadata until re-uploaded, and competitor source files are unchanged. The plugin does not send this data to an external service.', 'author-or-user-image' ) . '</p>'
 		);
 	}
 

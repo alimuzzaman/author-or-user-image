@@ -14,6 +14,7 @@ $GLOBALS['zmai_it_checks'] = 0;
 $GLOBALS['zmai_it_failures'] = 0;
 $GLOBALS['zmai_it_users'] = array();
 $GLOBALS['zmai_it_files'] = array();
+$GLOBALS['zmai_it_source_attachments'] = array();
 $GLOBALS['zmai_it_saved_job'] = get_option( 'zmai_import_job', null );
 function zmai_it_check( $ok, $label ) {
 	++$GLOBALS['zmai_it_checks'];
@@ -38,8 +39,23 @@ function zmai_it_file() {
 	$GLOBALS['zmai_it_files'][] = $path;
 	return array( 'path' => $path, 'url' => $uploads['url'] . '/' . basename( $path ) );
 }
+/** Register an administrator-assigned source for URL-only compatibility fixtures. */
+function zmai_it_owned_file() {
+	$file = zmai_it_file();
+	$id = wp_insert_attachment( array( 'post_author' => 1, 'post_mime_type' => 'image/png', 'post_status' => 'inherit', 'post_title' => 'Administrator-assigned source' ), $file['path'] );
+	if ( is_wp_error( $id ) || ! $id ) { throw new RuntimeException( 'Source attachment failed.' ); }
+	$GLOBALS['zmai_it_source_attachments'][] = array( 'blog' => get_current_blog_id(), 'id' => (int) $id );
+	return $file;
+}
 function zmai_it_cleanup() {
 	$store = new Image_Store();
+	foreach ( $GLOBALS['zmai_it_source_attachments'] as $source ) {
+		if ( is_multisite() && ! get_site( $source['blog'] ) ) { continue; }
+		$switch = is_multisite() && get_current_blog_id() !== (int) $source['blog'];
+		if ( $switch ) { switch_to_blog( $source['blog'] ); }
+		wp_delete_attachment( $source['id'], true );
+		if ( $switch ) { restore_current_blog(); }
+	}
 	foreach ( $GLOBALS['zmai_it_users'] as $id ) {
 		$store->delete_user_avatar( $id );
 		if ( is_multisite() ) { wpmu_delete_user( $id ); } else { wp_delete_user( $id ); }

@@ -28,7 +28,26 @@ if ( ! $user ) {
 }
 wp_set_current_user( $user->ID );
 $store = new AuthorOrUserImage\Image_Store();
+$metadata_editor = isset( $_GET['metadata_editor'] ) ? $_GET['metadata_editor'] : '';
+if ( in_array( $metadata_editor, array( 'GD', 'Imagick' ), true ) ) {
+	add_filter( 'wp_image_editors', static function () use ( $metadata_editor ) { return array( 'WP_Image_Editor_' . $metadata_editor ); } );
+	add_filter( 'image_strip_meta', '__return_false', PHP_INT_MAX );
+}
 $action = isset( $_GET['action'] ) ? sanitize_key( $_GET['action'] ) : 'snapshot';
+if ( 'metadata-inventory' === $action ) {
+	$id = isset( $_GET['default'] ) ? $store->get_default_attachment_id() : $store->get_user_attachment_id( $user->ID );
+	$path = get_attached_file( $id );
+	$meta = wp_get_attachment_metadata( $id );
+	$paths = $path ? array( $path ) : array();
+	foreach ( $meta['sizes'] ?? array() as $size ) { $paths[] = dirname( $path ) . '/' . $size['file']; }
+	if ( isset( $meta['original_image'] ) ) { $paths[] = dirname( $path ) . '/' . $meta['original_image']; }
+	$clean = $id > 0 && count( $paths ) > 0;
+	foreach ( array_unique( $paths ) as $file ) {
+		$clean = $clean && is_file( $file ) && false === strpos( file_get_contents( $file ), 'PRIVATE-PHOTO-FIX3' );
+	}
+	echo wp_json_encode( array( 'clean' => $clean, 'files' => count( array_unique( $paths ) ), 'imagick' => extension_loaded( 'imagick' ), 'image_meta' => $meta['image_meta'] ?? array() ) );
+	exit;
+}
 if ( 'reset-rate-fixture' === $action ) {
 	delete_user_meta( $user->ID, AuthorOrUserImage\Image_Store::user_meta_key( AuthorOrUserImage\Image_Store::UPLOAD_RATE_META ) );
 	echo '{}';

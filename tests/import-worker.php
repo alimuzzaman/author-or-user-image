@@ -20,7 +20,7 @@ if ( 'setup' === $mode ) {
 	$id = wp_insert_user( array( 'user_login' => 'import-worker-' . wp_generate_uuid4(), 'user_email' => wp_generate_uuid4() . '@example.invalid', 'user_pass' => 'local-public-fixture', 'role' => 'subscriber' ) );
 	if ( is_wp_error( $id ) ) { throw new RuntimeException( 'Fixture user failed.' ); }
 	$uploads = wp_upload_dir(); wp_mkdir_p( $uploads['path'] );
-	$path = $uploads['path'] . '/worker-' . wp_generate_uuid4() . '.png';
+	$path = $uploads['path'] . '/avatar_user_' . $id . '_' . time() . '.png';
 	$image = imagecreatetruecolor( 60, 30 ); imagepng( $image, $path );
 	if ( PHP_VERSION_ID < 80000 ) { imagedestroy( $image ); }
 	update_user_meta( $id, 'wp_user_avatars', array( 'full' => $uploads['url'] . '/' . basename( $path ) ) );

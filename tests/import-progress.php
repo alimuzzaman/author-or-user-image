@@ -18,7 +18,7 @@ try {
 	zmai_it_check( null === $migration->import_status() && false === get_option( 'zmai_import_job', false ), 'missing job stays idle without GET writes' );
 	$bad = $migration->start_import( 'arbitrary-class', wp_generate_uuid4(), 0 );
 	zmai_it_check( is_wp_error( $bad ), 'source registry rejects arbitrary identifiers' );
-	$file = zmai_it_file();
+	$file = zmai_it_owned_file();
 	$hash = hash_file( 'sha256', $file['path'] );
 	$users = array();
 	for ( $i = 0; $i < 48; ++$i ) {

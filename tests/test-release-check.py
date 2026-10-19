@@ -98,8 +98,9 @@ class ReleaseCheckTests(unittest.TestCase):
             "includes/class-admin-import.php",
         }
         self.assertTrue(required.issubset(RELEASE_CHECK.PRODUCTION_FILES))
+        self.assertIn("includes/class-image-metadata.php", RELEASE_CHECK.PRODUCTION_FILES)
 
-    def test_zip_contains_only_the_twenty_three_production_files(self) -> None:
+    def test_zip_contains_only_the_twenty_four_production_files(self) -> None:
         for directory in (".github", "docs", "tests", "tools", ".wordpress-org"):
             dev_file = self.project / directory / "release-note.txt"
             dev_file.parent.mkdir(parents=True, exist_ok=True)
@@ -109,7 +110,7 @@ class ReleaseCheckTests(unittest.TestCase):
         with zipfile.ZipFile(report.zip_path) as archive:
             members = tuple(sorted(archive.namelist()))
 
-        self.assertEqual(len(RELEASE_CHECK.PRODUCTION_FILES), 23)
+        self.assertEqual(len(RELEASE_CHECK.PRODUCTION_FILES), 24)
         self.assertTrue({"includes/class-lock.php", "includes/class-migration.php", "includes/class-user-cleanup.php"}.issubset(members))
         self.assertEqual(members, tuple(sorted(RELEASE_CHECK.PRODUCTION_FILES)))
         self.assertEqual(report.members, members)

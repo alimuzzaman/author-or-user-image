@@ -14,7 +14,7 @@ $replacement = 'fixture-release-' . wp_generate_uuid4();
 wp_set_current_user( 1 );
 try {
 	if ( null !== $old_signal || get_option( 'zmai_avatar_lock_migration' ) ) { throw new RuntimeException( 'Preexisting recovery state must be reconciled before fixture run.' ); }
-	$id = zmai_it_user(); $file = zmai_it_file();
+	$id = zmai_it_user(); $file = zmai_it_owned_file();
 	update_user_meta( $id, 'wp_user_avatars', array( 'full' => $file['url'] ) );
 	$sources = new Import_Sources( $store );
 	$break_read = static function ( $sql ) {

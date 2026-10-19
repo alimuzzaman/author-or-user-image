@@ -96,7 +96,7 @@ final class Import_Sources {
 			case 'one-user-avatar':
 				return $this->one_user( $user_id );
 			case 'wp-user-avatars':
-				return $this->array_source( $this->user_row( $user_id, 'wp_user_avatars' ), 'site_id' );
+				return $this->array_source( $this->user_row( $user_id, 'wp_user_avatars' ), 'site_id', $user_id );
 			case 'metronet-profile-picture':
 				return $this->metronet( $user_id );
 		}
@@ -207,7 +207,7 @@ final class Import_Sources {
 		if ( is_multisite() && isset( $options['value']['shared'] ) && 1 !== $options['value']['shared'] ) {
 			$key .= '_' . get_current_blog_id();
 		}
-		return $this->array_source( $this->user_row( $user_id, $key ), 'blog_id' );
+		return $this->array_source( $this->user_row( $user_id, $key ), 'blog_id', $user_id );
 	}
 
 	/**
@@ -215,9 +215,10 @@ final class Import_Sources {
 	 *
 	 * @param array|WP_Error $row Source row.
 	 * @param string         $site_key Verified site-ID field.
+	 * @param int            $user_id Subject.
 	 * @return array|WP_Error
 	 */
-	private function array_source( $row, $site_key ) {
+	private function array_source( $row, $site_key, $user_id ) {
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
@@ -240,9 +241,9 @@ final class Import_Sources {
 			if ( ! $this->positive_id( $value['media_id'] ) || ( is_multisite() && ! isset( $value[ $site_key ] ) ) ) {
 				return $this->error( 'invalid_source' );
 			}
-			return $this->attachment( $value['media_id'] );
+			return $this->attachment( $value['media_id'], $user_id );
 		}
-		return isset( $value['full'] ) ? $this->url_file( $value['full'] ) : $this->error( 'invalid_source' );
+		return isset( $value['full'] ) ? $this->url_file( $value['full'], $user_id, 'site_id' === $site_key ) : $this->error( 'invalid_source' );
 	}
 
 	/**
@@ -258,7 +259,7 @@ final class Import_Sources {
 		if ( ! is_wp_error( $row ) && ! $row['present'] && 'wp_user_avatar' !== $key && ( ! is_multisite() || is_main_site() ) ) {
 			$row = $this->user_row( $user_id, 'wp_user_avatar' );
 		}
-		return $this->id_row( $row );
+		return $this->id_row( $row, $user_id );
 	}
 
 	/**
@@ -277,7 +278,7 @@ final class Import_Sources {
 			return $row;
 		}
 		if ( ! $row['present'] ) {
-			return $this->id_row( $this->user_row( $user_id, $wpdb->get_blog_prefix() . 'metronet_image_id' ) );
+			return $this->id_row( $this->user_row( $user_id, $wpdb->get_blog_prefix() . 'metronet_image_id' ), $user_id );
 		}
 		if ( ! $this->positive_id( $row['value'] ) ) {
 			return $this->error( 'invalid_source' );
@@ -287,23 +288,24 @@ final class Import_Sources {
 			return $this->error( 'invalid_source' );
 		}
 		$thumbnail = $this->row( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE post_id = %d AND meta_key = %s', $wpdb->postmeta, $row['value'], '_thumbnail_id' ) );
-		return $this->id_row( $thumbnail );
+		return $this->id_row( $thumbnail, $user_id );
 	}
 
 	/**
 	 * Interpret an ID row with explicit empty/zero removal.
 	 *
 	 * @param array|WP_Error $row Source row.
+	 * @param int            $user_id Subject.
 	 * @return array|WP_Error
 	 */
-	private function id_row( $row ) {
+	private function id_row( $row, $user_id ) {
 		if ( is_wp_error( $row ) ) {
 			return $row;
 		}
 		if ( ! $row['present'] || '' === $row['value'] || '0' === $row['value'] ) {
 			return $this->error( 'no_source' );
 		}
-		return $this->positive_id( $row['value'] ) ? $this->attachment( $row['value'] ) : $this->error( 'invalid_source' );
+		return $this->positive_id( $row['value'] ) ? $this->attachment( $row['value'], $user_id ) : $this->error( 'invalid_source' );
 	}
 
 	/**
@@ -320,13 +322,18 @@ final class Import_Sources {
 	 * Resolve unfiltered current-table attachment metadata, never switch blogs.
 	 *
 	 * @param int $id Attachment ID.
+	 * @param int $user_id Subject.
 	 * @return array|WP_Error
 	 */
-	private function attachment( $id ) {
+	private function attachment( $id, $user_id ) {
 		global $wpdb;
 		$types = $this->store->database_values( $wpdb->prepare( "SELECT post_type FROM %i WHERE ID = %d AND post_mime_type IN ('image/jpeg','image/png','image/webp')", $wpdb->posts, $id ) );
 		if ( array( 'attachment' ) !== $types ) {
 			return $this->error( 'invalid_source' );
+		}
+		$authors = $this->store->database_values( $wpdb->prepare( 'SELECT post_author FROM %i WHERE ID = %d', $wpdb->posts, $id ) );
+		if ( 1 !== count( $authors ) || ( (int) $authors[0] !== (int) $user_id && ! user_can( (int) $authors[0], 'edit_user', (int) $user_id ) ) ) {
+			return $this->error( 'not_owned' );
 		}
 		$row = $this->row( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE post_id = %d AND meta_key = %s', $wpdb->postmeta, $id, '_wp_attached_file' ) );
 		if ( is_wp_error( $row ) || ! $row['present'] || ! is_string( $row['value'] ) ) {
@@ -344,9 +351,11 @@ final class Import_Sources {
 	 * Exact canonical uploads URL mapping only. This method never fetches a URL.
 	 *
 	 * @param mixed $url Stored full URL.
+	 * @param int   $user_id Subject.
+	 * @param bool  $wp_user_avatars Permit verified WPUA direct-upload naming.
 	 * @return array|WP_Error
 	 */
-	private function url_file( $url ) {
+	private function url_file( $url, $user_id, $wp_user_avatars = false ) {
 		if ( ! is_string( $url ) || preg_match( '/[\x00-\x20\\\\?#]/', $url ) || preg_match( '/%(?:2f|5c|00)/i', $url ) ) {
 			return $this->error( 'unsupported_source' );
 		}
@@ -367,7 +376,40 @@ final class Import_Sources {
 		if ( is_multisite() && is_main_site() && 0 === strpos( $relative, 'sites/' ) ) {
 			return $this->error( 'other_site' );
 		}
-		return $this->local_file( trailingslashit( $uploads['basedir'] ) . $relative );
+		$file = $this->local_file( trailingslashit( $uploads['basedir'] ) . $relative );
+		if ( is_wp_error( $file ) ) {
+			return $file;
+		}
+		return $this->owned_url_file( $file, $user_id, $wp_user_avatars );
+	}
+
+	/**
+	 * Authorize a canonical URL source by its attachment or verified WPUA naming.
+	 *
+	 * @param array $file Canonical contained file.
+	 * @param int   $user_id Subject.
+	 * @param bool  $wp_user_avatars Allow WPUA's subject-ID direct-upload names.
+	 * @return array|WP_Error
+	 */
+	private function owned_url_file( array $file, $user_id, $wp_user_avatars ) {
+		global $wpdb;
+		$uploads  = wp_upload_dir( null, false );
+		$root     = realpath( $uploads['basedir'] );
+		$relative = str_replace( DIRECTORY_SEPARATOR, '/', substr( $file['path'], strlen( $root ) + 1 ) );
+		$ids      = $this->store->database_values( $wpdb->prepare( 'SELECT post_id FROM %i WHERE meta_key = %s AND meta_value IN (%s, %s)', $wpdb->postmeta, '_wp_attached_file', $relative, $file['path'] ) );
+		foreach ( $ids as $id ) {
+			$owned = $this->attachment( $id, $user_id );
+			if ( ! is_wp_error( $owned ) && $owned['path'] === $file['path'] ) {
+				return $file;
+			}
+		}
+		// WPUA 2.2.0 common.php::wp_user_avatars_unique_filename_callback uses
+		// avatar_user_ID_timestamp[_collision]. Its direct uploads have no attachment.
+		// Only the ordinary uploads root/date directories qualify, not protected trees.
+		if ( ! $ids && $wp_user_avatars && preg_match( '#^(?:[0-9]{4}/(?:0[1-9]|1[0-2])/)?avatar_user_' . (int) $user_id . '_[1-9][0-9]{8,10}(?:_[1-9][0-9]*)?\.(?:jpg|jpeg|jpe|png|webp)$#D', $relative ) ) {
+			return $file;
+		}
+		return $this->error( 'not_owned' );
 	}
 
 	/**

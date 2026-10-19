@@ -187,13 +187,18 @@ try {
 	}
 	$source_user_id = (int) $source_user_id;
 
-	$source_sla_media = import_sources_fixture_attachment( $source_uploads, 'sla-media', 1 );
-	$source_oua_media = import_sources_fixture_attachment( $source_uploads, 'one-user-avatar', 1 );
-	$source_wp_media = import_sources_fixture_attachment( $source_uploads, 'wp-user-avatars', 1 );
-	$source_metronet_mirror = import_sources_fixture_attachment( $source_uploads, 'metronet-mirror', 1 );
-	$source_metronet_thumbnail = import_sources_fixture_attachment( $source_uploads, 'metronet-thumbnail', 1 );
+	$source_sla_media = import_sources_fixture_attachment( $source_uploads, 'sla-media', $source_user_id );
+	$source_oua_media = import_sources_fixture_attachment( $source_uploads, 'one-user-avatar', $source_user_id );
+	$source_wp_media = import_sources_fixture_attachment( $source_uploads, 'wp-user-avatars', $source_user_id );
+	$source_metronet_mirror = import_sources_fixture_attachment( $source_uploads, 'metronet-mirror', $source_user_id );
+	$source_metronet_thumbnail = import_sources_fixture_attachment( $source_uploads, 'metronet-thumbnail', $source_user_id );
 	$source_wp_full_path = import_sources_fixture_file( $source_uploads, 'wp-user-avatars-full' );
-	$source_sla_full_path = import_sources_fixture_file( $source_uploads, 'sla-full' );
+	$source_wp_direct = $source_uploads['path'] . '/avatar_user_' . $source_user_id . '_' . time() . '.png';
+	rename( $source_wp_full_path, $source_wp_direct );
+	$source_file_paths[] = $source_wp_direct;
+	$source_wp_full_path = $source_wp_direct;
+	$source_sla_full = import_sources_fixture_attachment( $source_uploads, 'sla-full', $source_user_id );
+	$source_sla_full_path = $source_sla_full['path'];
 
 	$source_original_sla = get_option( 'simple_local_avatars', null );
 	update_option( 'simple_local_avatars', $source_sla_settings, false );

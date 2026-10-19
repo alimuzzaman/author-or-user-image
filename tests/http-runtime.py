@@ -125,6 +125,26 @@ with tempfile.TemporaryFile(dir=options.scratch) as server_log:
         check(all("zmai_status=uploaded" in url for url in locations[:5]) and "zmai_status=upload-error" in locations[5], "real multipart sixth authorized attempt is throttled")
         request("reset-rate-fixture")
 
+        # Native multipart staging must be sanitized without losing PHP's upload provenance.
+        text_payload = b"comment\x00PRIVATE-PHOTO-FIX3"
+        text_chunk = struct.pack(">I", len(text_payload)) + b"tEXt" + text_payload
+        text_chunk += struct.pack(">I", zlib.crc32(b"tEXt" + text_payload) & 0xffffffff)
+        tagged_png = png[:33] + text_chunk + png[33:]
+        capabilities = request("metadata-inventory")[1]
+        for editor in ("GD", "Imagick"):
+            if editor == "Imagick" and not capabilities["imagick"]:
+                print("SKIP native multipart Imagick metadata inventory: extension unavailable", flush=True)
+                continue
+            for role, kind, field in (("subscriber", "user", "user_avatar"), ("admin", "default", "default_avatar")):
+                request("reset-rate-fixture", role)
+                status, result = request("zmai_save_avatar", role,
+                    fields={"_wpnonce": nonce("zmai_save_avatar", role), "avatar_type": kind,
+                            "zmai_strip_image_metadata": "0", "image_strip_meta": "false"},
+                    image=(field, "tagged.png", tagged_png), metadata_editor=editor)
+                inventory = request("metadata-inventory", role, **({"default": "1"} if kind == "default" else {}))[1]
+                check(status == 200 and "zmai_status=uploaded" in result.get("location", "") and inventory["clean"],
+                      f"{editor} native multipart {kind} strips metadata despite forged optout and image_strip_meta=false")
+
     finally:
         server.terminate()
         server.wait(timeout=10)

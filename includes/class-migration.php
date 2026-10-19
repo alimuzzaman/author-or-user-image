@@ -403,6 +403,7 @@ final class Migration {
 	private function permanent_import_reason( $code ) {
 		$reasons = array(
 			'zmai_import_invalid_source'     => 'invalid_source',
+			'zmai_import_not_owned'          => 'not_owned',
 			'zmai_import_missing_file'       => 'missing_file',
 			'zmai_import_unsupported_source' => 'unsupported_source',
 			'zmai_invalid_source'            => 'invalid_source',
@@ -413,6 +414,7 @@ final class Migration {
 			'zmai_invalid_dimensions'        => 'invalid_dimensions',
 			'zmai_jpeg_exif_unavailable'     => 'jpeg_exif_unavailable',
 			'zmai_image_format'              => 'image_format',
+			'zmai_metadata_cmyk'             => 'metadata_cmyk',
 		);
 		return $reasons[ $code ] ?? '';
 	}
@@ -567,7 +569,7 @@ final class Migration {
 		$complete     = true;
 		$default_path = $this->store->get_legacy_default_path();
 		if ( ! $this->store->get_default_attachment_id() && $default_path && is_file( $default_path ) ) {
-			$complete = $this->sideload_legacy_image( $default_path, 0 );
+			$complete = true === $this->sideload_legacy_image( $default_path, 0 );
 		}
 
 		$offset = absint( $this->store->read_value( 0, '', Image_Store::MIGRATION_OPTION ) );
@@ -587,7 +589,7 @@ final class Migration {
 
 			$path = $this->store->get_legacy_user_path( $user->ID );
 			if ( $path && is_file( $path ) ) {
-				if ( ! $this->sideload_legacy_image( $path, $user->ID ) ) {
+				if ( true !== $this->sideload_legacy_image( $path, $user->ID ) ) {
 					$complete = false;
 				}
 			}
@@ -621,7 +623,7 @@ final class Migration {
 	 *
 	 * @param string $path    Legacy file path.
 	 * @param int    $user_id User ID, or zero for the default.
-	 * @return bool Whether the image was imported successfully.
+	 * @return bool|WP_Error True for completion, false or a typed error on failure.
 	 */
 	private function sideload_legacy_image( $path, $user_id ) {
 		$result = $this->store->get_lock()->with_owner_lock(
@@ -653,6 +655,17 @@ final class Migration {
 					'tmp_name' => $temporary,
 				);
 				try {
+					$clean = Image_Metadata::sanitize(
+						$temporary,
+						$file['name'],
+						array(
+							'owner'  => (int) $user_id,
+							'source' => 'legacy',
+						)
+					);
+					if ( is_wp_error( $clean ) ) {
+						return $clean;
+					}
 					$id = media_handle_sideload( $file, 0, null, array( 'meta_input' => array( Image_Store::ATTACHMENT_OWNER_META => $this->store->owner_name( $user_id ) ) ) );
 				} finally {
 					wp_delete_file( $temporary );
@@ -664,6 +677,11 @@ final class Migration {
 					$cleanup = $this->store->delete_attachment_checked( $id );
 					return is_wp_error( $cleanup ) ? $cleanup : false;
 				}
+				$privacy = $this->store->sanitize_attachment_files( $id, $user_id, $clean );
+				if ( is_wp_error( $privacy ) ) {
+					$cleanup = $this->store->delete_attachment_checked( $id );
+					return is_wp_error( $cleanup ) ? $cleanup : $privacy;
+				}
 				$written = $this->store->write_value( $user_id, Image_Store::MIGRATED_USER_META, Image_Store::MIGRATED_DEFAULT_OPTION, $id );
 				if ( is_wp_error( $written ) ) {
 					$cleanup = $this->store->delete_attachment_checked( $id );
@@ -672,6 +690,6 @@ final class Migration {
 				return $this->store->cleanup_owned( $user_id, $id );
 			}
 		);
-		return ! is_wp_error( $result ) && true === $result;
+		return is_wp_error( $result ) ? $result : true === $result;
 	}
 }

@@ -81,7 +81,7 @@ An individual block still stops that user from uploading, whatever their role. O
 
 = Is there an upload rate limit? =
 
-Each user can make five authorized self-upload attempts per minute and twenty per hour, shared between the dashboard and front-end form. Failed image attempts count too. Removal, privacy erasure, administrator moderation, imports and site-default changes do not use this counter.
+Each user can make five authorized self-upload attempts per minute and twenty per hour, shared between the dashboard and front-end form on the same site. Multisite counters are per site, so a member of several sites has a separate allowance on each. Failed image attempts count too. Removal, privacy erasure, administrator moderation, imports and site-default changes do not use this counter.
 
 = How do I add an upload form to a page? =
 
@@ -105,7 +105,7 @@ The plugin accepts JPEG, PNG, and static WebP images. GIF, SVG, AVIF, APNG, and 
 
 = How are new avatars cropped? =
 
-Each new upload and competitor import gets a square rendition, cropped from the center to the avatar size set in the settings. The original image is kept uncropped, with its metadata.
+Each new upload and competitor import gets a square rendition, cropped from the center to the avatar size set in the settings. The sanitized original image is kept uncropped.
 
 Center cropping can cut off a face near an edge, so upload a square or centered photo for the best result. A small image may be enlarged for display, which can look soft.
 
@@ -117,7 +117,15 @@ Existing avatars and legacy JPG files are not rewritten. They keep their current
 
 An uncropped original is never served as a replacement for a missing square file.
 
-Cropping is not redaction. The original keeps its full image and metadata.
+Cropping is not redaction. The original keeps its full image.
+
+= Does the plugin remove photo metadata? =
+
+Starting with 3.1, new uploads, imported copies and legacy migration copies remove EXIF, GPS, XMP, IPTC, comments and embedded thumbnails before WordPress stores the image. JPEG orientation is applied to pixels first. Rendering data, transparency and ICC color profiles are retained. Malformed files or failed sanitation are rejected, keeping the previous avatar. Oriented CMYK JPEGs are rejected when the selected editor cannot preserve their color space.
+
+Previously uploaded originals and existing legacy files keep their metadata until the user re-uploads. There is no automatic backfill. Competitor source files and metadata are never changed.
+
+Trusted PHP code can opt out for an individual operation with the `zmai_strip_image_metadata` filter, which receives a boolean defaulting to true and a context array with `owner` and `source` keys. Source is `upload`, `default`, `import` or `legacy`. This exception retains descriptive metadata and cannot be enabled through form fields, block attributes or imported settings. It does not bypass upload validation, provenance, permissions or rate limits.
 
 = How do I import avatars from another plugin? =
 
@@ -179,7 +187,9 @@ Major security and standards rewrite. Existing settings and legacy JPG avatars a
 * Added the Avatar upload block and `[author_or_user_image_upload]` shortcode for signed-in visitors.
 * Added a site-local upload setting that limits self-service uploads to selected roles. The default keeps the existing rule.
 * Added per-user self-upload attempt limits shared by dashboard and front-end forms.
-* Added center-square renditions for new uploads and competitor imports. Originals keep their full, uncropped pixels and metadata.
+* Restricted importer adoption to subject-owned or legitimately administrator-assigned attachments. Unprovable URL-only references are skipped as not_owned.
+* Replaced arbitrary administrator error text with fixed messages.
+* Added center-square renditions for new uploads and competitor imports. Originals keep their full, uncropped pixels. New stored files strip descriptive metadata by default while retaining ICC color data. Earlier uploads retain metadata until re-uploaded.
 * Added an Import avatars page under Users. It imports one source plugin at a time, in pages that can resume, from Simple Local Avatars, One User Avatar and WP User Avatar attachment IDs, WP User Avatars, and User Profile Picture / Metronet.
 * Import leaves source plugin data unchanged and never deactivates or removes source plugins.
 

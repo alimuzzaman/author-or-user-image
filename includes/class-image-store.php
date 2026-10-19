@@ -150,6 +150,10 @@ final class Image_Store {
 				if ( UPLOAD_ERR_OK !== (int) $file['error'] || ! is_string( $file['tmp_name'] ) || ! is_string( $file['name'] ) ) {
 					return new WP_Error( 'zmai_upload_failed', __( 'The image upload did not complete.', 'author-or-user-image' ) );
 				}
+				// Check before modifying bytes; core repeats its native upload check below.
+				if ( ! is_uploaded_file( $file['tmp_name'] ) ) {
+					return new WP_Error( 'zmai_upload_provenance', __( 'Choose a newly uploaded image.', 'author-or-user-image' ) );
+				}
 				$processor = new Image_Processor();
 				$validated = $processor->validate_local_image( $file['tmp_name'], $file['name'] );
 				if ( is_wp_error( $validated ) ) {
@@ -158,6 +162,21 @@ final class Image_Store {
 				if ( 'image/jpeg' === $validated['type'] && ! function_exists( 'exif_read_data' ) ) {
 					return new WP_Error( 'zmai_jpeg_exif_unavailable', __( 'JPEG processing requires server EXIF support.', 'author-or-user-image' ) );
 				}
+				$validated = Image_Metadata::sanitize(
+					$file['tmp_name'],
+					$file['name'],
+					array(
+						'owner'  => $user_id,
+						'source' => $user_id ? 'upload' : 'default',
+					)
+				);
+				if ( is_wp_error( $validated ) ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink,WordPress.PHP.NoSilencedErrors.Discouraged -- This is a verified private PHP upload, not a media-deletion filter target.
+					@unlink( $file['tmp_name'] );
+					return $validated;
+				}
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- The authenticated handler checks its nonce; core needs the checked staging size.
+				$_FILES[ $field ]['size'] = $validated['filesize'];
 				$this->load_media_api();
 				$this->register_image_size();
 				$this->lock->mark_mutation();
@@ -183,7 +202,7 @@ final class Image_Store {
 				if ( is_wp_error( $attachment_id ) ) {
 					return $attachment_id;
 				}
-				$ready = $this->prepare_attachment( $attachment_id, $user_id, $validated['type'] );
+				$ready = $this->prepare_attachment( $attachment_id, $user_id, $validated['type'], $validated );
 				if ( ! is_wp_error( $ready ) && $user_id && ! $policy->can_upload_fresh( $user_id ) ) {
 					$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
 				}
@@ -400,6 +419,17 @@ final class Image_Store {
 						if ( is_wp_error( $copy ) ) {
 							return $copy;
 						}
+						$copy = Image_Metadata::sanitize(
+							$temporary,
+							$source['name'],
+							array(
+								'owner'  => $user_id,
+								'source' => 'import',
+							)
+						);
+						if ( is_wp_error( $copy ) ) {
+							return $copy;
+						}
 						$this->register_image_size();
 						return $this->stage_media(
 							function () use ( $copy, $temporary, $user_id ) {
@@ -431,7 +461,7 @@ final class Image_Store {
 				if ( is_wp_error( $id ) ) {
 					return $id;
 				}
-				$ready = $this->prepare_attachment( $id, $user_id, $copy['type'] );
+				$ready = $this->prepare_attachment( $id, $user_id, $copy['type'], $copy );
 				if ( ! is_wp_error( $ready ) ) {
 					$state = $this->import_state( $user_id, false );
 					if ( null !== $state ) {
@@ -551,10 +581,11 @@ final class Image_Store {
 	 * @param int    $id Staged attachment ID.
 	 * @param int    $user_id Owner, zero for default.
 	 * @param string $mime Validated input MIME; format conversion is not permitted.
+	 * @param array  $input Incoming privacy decision and compatible color data.
 	 * @return true|WP_Error
 	 * @throws \Throwable When a metadata operation reports a database failure.
 	 */
-	private function prepare_attachment( $id, $user_id, $mime ) {
+	private function prepare_attachment( $id, $user_id, $mime, array $input ) {
 		global $wpdb;
 		if ( ! wp_attachment_is_image( $id ) || ! $this->owns_attachment( $id, $user_id ) ) {
 			return $this->storage_error();
@@ -620,6 +651,11 @@ final class Image_Store {
 				return $this->storage_error( is_file( $saved['path'] ) && ! $confirmed );
 			}
 		}
+		$privacy = $this->sanitize_attachment_files( $id, $user_id, $input );
+		if ( is_wp_error( $privacy ) ) {
+			return $privacy;
+		}
+		$meta = wp_get_attachment_metadata( $id, true );
 		if ( ! $this->confirm_post_meta( $id, '_wp_attachment_metadata', $meta ) || ! $this->valid_square( $file, $meta['sizes']['zmai-avatar'], $target, $original['type'] ) ) {
 			return $this->storage_error();
 		}
@@ -634,6 +670,74 @@ final class Image_Store {
 			return $this->storage_error();
 		}
 		return $this->confirm_post_meta( $id, self::SQUARE_VERSION_META, 1 ) ? true : $this->storage_error();
+	}
+
+	/**
+	 * Verify and sanitize every file recorded for a newly owned attachment.
+	 *
+	 * Source staging is already clean. Editors can add their own JPEG comments
+	 * or discard color data; reconcile those before publishing the mapping.
+	 *
+	 * @internal
+	 * @param int   $id Newly staged attachment.
+	 * @param int   $user_id Expected owner.
+	 * @param array $input Incoming privacy decision and color data.
+	 * @return true|WP_Error
+	 */
+	public function sanitize_attachment_files( $id, $user_id, array $input ) {
+		if ( empty( $input['metadata_stripped'] ) ) {
+			return true;
+		}
+		if ( ! $this->owns_attachment( $id, $user_id ) ) {
+			return $this->storage_error();
+		}
+		$file = get_attached_file( $id, true );
+		$meta = wp_get_attachment_metadata( $id, true );
+		if ( ! $this->is_uploads_file( $file ) || ! is_array( $meta ) ) {
+			return $this->storage_error();
+		}
+		$files = array( basename( $file ) );
+		foreach ( array( 'original_image', 'source_image' ) as $key ) {
+			if ( ! empty( $meta[ $key ] ) ) {
+				$files[] = $meta[ $key ];
+			}
+		}
+		foreach ( $meta['sizes'] ?? array() as $size ) {
+			if ( ! empty( $size['file'] ) ) {
+				$files[] = $size['file'];
+			}
+		}
+		$backups = get_post_meta( $id, '_wp_attachment_backup_sizes', true );
+		foreach ( is_array( $backups ) ? $backups : array() as $size ) {
+			if ( ! empty( $size['file'] ) ) {
+				$files[] = $size['file'];
+			}
+		}
+		$icc   = ( $input['metadata_channels'] ?? 3 ) === 3 ? ( $input['metadata_icc'] ?? '' ) : '';
+		$sizes = array();
+		foreach ( array_unique( $files ) as $name ) {
+			if ( ! is_string( $name ) || basename( $name ) !== $name ) {
+				return $this->storage_error();
+			}
+			$path = dirname( $file ) . '/' . $name;
+			if ( ! $this->is_uploads_file( $path ) || realpath( dirname( $path ) ) !== dirname( realpath( $path ) ) ) {
+				return $this->storage_error();
+			}
+			$clean = Image_Metadata::sanitize_generated( $path, $icc );
+			if ( is_wp_error( $clean ) ) {
+				return $clean;
+			}
+			$sizes[ $name ] = $clean['filesize'];
+		}
+		$meta['filesize'] = $sizes[ basename( $file ) ];
+		foreach ( $meta['sizes'] ?? array() as $key => $size ) {
+			if ( isset( $sizes[ $size['file'] ] ) ) {
+				$meta['sizes'][ $key ]['filesize'] = $sizes[ $size['file'] ];
+			}
+		}
+		$this->lock->mark_mutation();
+		wp_update_attachment_metadata( $id, $meta );
+		return $this->confirm_post_meta( $id, '_wp_attachment_metadata', $meta ) ? true : $this->storage_error();
 	}
 
 	/**

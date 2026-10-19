@@ -39,6 +39,7 @@ PRODUCTION_FILES: tuple[str, ...] = (
     "includes/class-admin-import.php",
     "includes/class-front-end.php",
     "includes/class-image-processor.php",
+    "includes/class-image-metadata.php",
     "includes/class-import-sources.php",
     "includes/class-upload-policy.php",
     "includes/class-image-store.php",

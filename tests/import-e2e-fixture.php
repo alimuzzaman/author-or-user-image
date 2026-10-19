@@ -18,6 +18,7 @@ if ( 'cleanup' === $mode ) {
 	$fixture = json_decode( file_get_contents( $output ), true );
 	if ( ! is_array( $fixture ) || realpath( ZMAI_PATH ) !== $fixture['candidate'] || get_current_blog_id() !== $fixture['site_id'] ) { throw new RuntimeException( 'Fixture candidate or site mismatch.' ); }
 	$GLOBALS['zmai_it_users'] = $fixture['sourceUserIds'];
+	$GLOBALS['zmai_it_source_attachments'] = $fixture['sourceAttachments'] ?? array();
 	$GLOBALS['zmai_it_files'] = array( $fixture['repairPath'], $fixture['missingPath'] );
 	$GLOBALS['zmai_it_saved_job'] = $fixture['oldJob'];
 	wp_delete_post( $fixture['postId'], true );
@@ -28,7 +29,7 @@ if ( 'cleanup' === $mode ) {
 if ( file_exists( $output ) || get_option( 'zmai_import_job' ) ) { throw new RuntimeException( 'Cleanup the previous browser fixture/job first.' ); }
 $post_id = 0;
 try {
-	$file = zmai_it_file();
+	$file = zmai_it_owned_file();
 	$missing_path = dirname( $file['path'] ) . '/missing-' . wp_generate_uuid4() . '.png';
 	$users = array();
 	for ( $index = 0; $index < 45; ++$index ) {
@@ -37,7 +38,7 @@ try {
 	}
 	$post_id = wp_insert_post( array( 'post_title' => 'Disposable importer pixel fixture', 'post_status' => 'publish', 'post_author' => end( $users ), 'post_content' => '<!-- wp:post-author {"showAvatar":true} /-->' ), true );
 	if ( is_wp_error( $post_id ) ) { throw new RuntimeException( 'Could not create fixture post.' ); }
-	$fixture = array( 'candidate' => realpath( ZMAI_PATH ), 'site_id' => get_current_blog_id(), 'source' => 'wp-user-avatars', 'sourceUserIds' => $users, 'frontUrl' => get_permalink( $post_id ), 'postId' => $post_id, 'avatarSelector' => '.wp-block-post-author__avatar img', 'expectedRGB' => array( 0, 200, 50 ), 'missingPath' => $missing_path, 'repairPath' => $file['path'], 'oldJob' => $GLOBALS['zmai_it_saved_job'] );
+	$fixture = array( 'candidate' => realpath( ZMAI_PATH ), 'site_id' => get_current_blog_id(), 'source' => 'wp-user-avatars', 'sourceUserIds' => $users, 'sourceAttachments' => $GLOBALS['zmai_it_source_attachments'], 'frontUrl' => get_permalink( $post_id ), 'postId' => $post_id, 'avatarSelector' => '.wp-block-post-author__avatar img', 'expectedRGB' => array( 0, 200, 50 ), 'missingPath' => $missing_path, 'repairPath' => $file['path'], 'oldJob' => $GLOBALS['zmai_it_saved_job'] );
 	if ( false === file_put_contents( $output, wp_json_encode( $fixture ) ) ) { throw new RuntimeException( 'Could not record fixture state.' ); }
 	echo "PREPARED 45 users, one missing local source, and an author-avatar pixel page\n";
 } catch ( Throwable $error ) {

@@ -198,3 +198,16 @@ JSON-based runners require warning-free PHP startup. On hosts where PHP 7.4
 cannot allocate PCRE JIT memory, use a scratch executable wrapper that passes
 `-d pcre.jit=0` to the real PHP binary, including nested workers and servers.
 Do not strip warnings from JSON responses to turn a failed check into a pass.
+
+### Metadata privacy and import ownership
+
+On a marked disposable local WordPress fixture, use the candidate bootstrap and
+`wp eval-file tests/<suite>.php` for `image-metadata`, `metadata-png`,
+`metadata-webp`, `metadata-orientation`, `metadata-storage`, and `import-ownership`.
+Take the shared fixture lock and serialize these with browser/database runs.
+`metadata-fixtures.php` is a helper, not an executable suite. Fixtures are generated
+under the fix3 scratch root. Orientation and storage suites force both GD and
+Imagick, including RGB ICC retention, oriented CMYK rejection on GD, scaled
+originals, core-square reuse, fallback squares, imports and legacy copies.
+`http-runtime.py` also checks genuine multipart user/default metadata removal
+under both editors, forged opt-out request fields and `image_strip_meta=false`.

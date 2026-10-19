@@ -73,11 +73,11 @@ try {
 	if ( is_wp_error( $blog ) ) { throw new RuntimeException( 'Could not create B2 subsite.' ); }
 	$b2_foreign = (int) $blog;
 	switch_to_blog( $b2_foreign );
-	$b2_file = zmai_it_file();
+	$b2_file = zmai_it_owned_file();
 	restore_current_blog();
 	switch_to_blog( $b2_main );
 	zmai_it_check( is_main_site(), 'B2 fixture runs on the main site' );
-	$b2_root = zmai_it_file();
+	$b2_root = zmai_it_owned_file();
 	update_user_meta( $b2_user, 'wp_user_avatars', array( 'full' => $b2_file['url'] ) );
 	$b2_url = $sources->resolve( 'wp-user-avatars', $b2_user );
 	zmai_it_check( is_wp_error( $b2_url ) && 'zmai_import_other_site' === $b2_url->get_error_code(), 'main-site URL without site ID under another uploads/sites subtree is other_site' );
@@ -101,5 +101,6 @@ try {
 	wpmu_delete_user( $b2_user );
 	if ( isset( $b2_file ) ) { wp_delete_file( $b2_file['path'] ); }
 	if ( isset( $b2_root ) ) { wp_delete_file( $b2_root['path'] ); }
+	foreach ( $GLOBALS['zmai_it_source_attachments'] as $source ) { if ( (int) $source['blog'] === (int) get_current_blog_id() ) { wp_delete_attachment( $source['id'], true ); } }
 }
 zmai_it_done();
