@@ -121,7 +121,7 @@ Cropping is not redaction. The original keeps its full image.
 
 = Does the plugin remove photo metadata? =
 
-Starting with 3.1, new uploads, imported copies and legacy migration copies remove EXIF, GPS, XMP, IPTC, comments and embedded thumbnails before WordPress stores the image. JPEG orientation is applied to pixels first. Rendering data, transparency and ICC color profiles are retained. Malformed files or failed sanitation are rejected, keeping the previous avatar. Oriented CMYK JPEGs are rejected when the selected editor cannot preserve their color space.
+Starting with 3.1, new uploads, imported copies and legacy migration copies remove EXIF, GPS, XMP, IPTC, comments and embedded thumbnails before WordPress stores the image. JPEG, PNG eXIf and WebP EXIF orientation is applied to pixels first, including mirrored orientations. Rendering data, transparency and ICC color profiles are retained. Malformed files or failed sanitation are rejected, keeping the previous avatar. Oriented CMYK JPEGs are rejected when the selected editor cannot preserve their color space.
 
 Previously uploaded originals and existing legacy files keep their metadata until the user re-uploads. There is no automatic backfill. Competitor source files and metadata are never changed.
 

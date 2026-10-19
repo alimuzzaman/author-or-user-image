@@ -25,7 +25,7 @@ if ( ! class_exists( Image_Processor::class ) && defined( 'ZMAI_TEST_CANDIDATE' 
 $GLOBALS['zmai_image_failures'] = array();
 $GLOBALS['zmai_image_checks']   = 0;
 $GLOBALS['zmai_image_missing']  = array();
-$GLOBALS['zmai_image_root']     = '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/fixtures';
+$GLOBALS['zmai_image_root']     = sys_get_temp_dir() . '/fixtures';
 
 /** Record an assertion and keep running independent cases.
  *

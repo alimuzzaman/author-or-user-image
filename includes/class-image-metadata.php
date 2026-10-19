@@ -75,8 +75,8 @@ final class Image_Metadata {
 				$valid['metadata_stripped'] = false;
 				return $valid;
 			}
-			if ( 'image/jpeg' === $valid['type'] && 1 !== $clean['orientation'] ) {
-				$clean = self::orient( $valid['path'], $clean );
+			if ( 1 !== $clean['orientation'] ) {
+				$clean = self::orient( $valid['path'], $clean, $valid['type'] );
 				if ( is_wp_error( $clean ) ) {
 					return $clean;
 				}
@@ -100,7 +100,7 @@ final class Image_Metadata {
 			if ( is_wp_error( $result ) || $result['type'] !== $valid['type'] ) {
 				return self::error();
 			}
-			$swapped = 'image/jpeg' === $valid['type'] && in_array( $clean['input_orientation'] ?? 1, array( 5, 6, 7, 8 ), true );
+			$swapped = in_array( $clean['input_orientation'] ?? 1, array( 5, 6, 7, 8 ), true );
 			if ( $result['width'] !== $valid[ $swapped ? 'height' : 'width' ] || $result['height'] !== $valid[ $swapped ? 'width' : 'height' ] ) {
 				return self::error();
 			}
@@ -174,11 +174,10 @@ final class Image_Metadata {
 	/**
 	 * Read IFD0 orientation without trusting offsets or decoding pixels.
 	 *
-	 * @param string $payload EXIF APP1 contents.
+	 * @param string $tiff Bounded TIFF bytes, without an Exif header.
 	 * @return int
 	 */
-	private static function orientation( $payload ) {
-		$tiff = substr( $payload, 6 );
+	private static function orientation( $tiff ) {
 		self::require_structure( strlen( $tiff ) >= 8 && in_array( substr( $tiff, 0, 2 ), array( 'II', 'MM' ), true ) );
 		$little = 'II' === substr( $tiff, 0, 2 );
 		self::require_structure( 42 === self::integer( $tiff, 2, 2, $little ) );
@@ -246,7 +245,7 @@ final class Image_Metadata {
 			$keep    = $marker < 0xe0 && 0xfe !== $marker;
 			if ( 0xe1 === $marker && "Exif\0\0" === substr( $payload, 0, 6 ) ) {
 				self::require_structure( ! $exif );
-				$orientation = self::orientation( $payload );
+				$orientation = self::orientation( substr( $payload, 6 ) );
 				$exif        = true;
 			} elseif ( 0xe2 === $marker && "ICC_PROFILE\0" === substr( $payload, 0, 12 ) ) {
 				self::require_structure( strlen( $payload ) >= 15 );
@@ -311,10 +310,12 @@ final class Image_Metadata {
 	private static function png( $bytes ) {
 		$length = strlen( $bytes );
 		self::require_structure( "\x89PNG\r\n\x1a\n" === substr( $bytes, 0, 8 ) );
-		$out    = substr( $bytes, 0, 8 );
-		$offset = 8;
-		$icc    = '';
-		$keep   = array( 'IHDR', 'PLTE', 'IDAT', 'IEND', 'tRNS', 'iCCP', 'sRGB', 'gAMA', 'cHRM', 'sBIT', 'bKGD' );
+		$out         = substr( $bytes, 0, 8 );
+		$offset      = 8;
+		$icc         = '';
+		$orientation = 1;
+		$exif        = false;
+		$keep        = array( 'IHDR', 'PLTE', 'IDAT', 'IEND', 'tRNS', 'iCCP', 'sRGB', 'gAMA', 'cHRM', 'sBIT', 'bKGD' );
 		while ( $offset < $length ) {
 			self::require_structure( $offset + 12 <= $length );
 			$size = unpack( 'N', substr( $bytes, $offset, 4 ) )[1];
@@ -326,6 +327,11 @@ final class Image_Metadata {
 				self::require_structure( '' === $icc );
 				$icc = $chunk;
 			}
+			if ( 'eXIf' === $type ) {
+				self::require_structure( ! $exif );
+				$orientation = self::orientation( substr( $chunk, 8, $size ) );
+				$exif        = true;
+			}
 			if ( in_array( $type, $keep, true ) ) {
 				$out .= $chunk;
 			} else {
@@ -335,7 +341,7 @@ final class Image_Metadata {
 		}
 		return array(
 			'bytes'       => $out,
-			'orientation' => 1,
+			'orientation' => $orientation,
 			'icc'         => $icc,
 		);
 	}
@@ -349,15 +355,17 @@ final class Image_Metadata {
 	private static function webp( $bytes ) {
 		$length = strlen( $bytes );
 		self::require_structure( $length >= 20 && 'RIFF' === substr( $bytes, 0, 4 ) && 'WEBP' === substr( $bytes, 8, 4 ) && unpack( 'V', substr( $bytes, 4, 4 ) )[1] + 8 === $length );
-		$offset   = 12;
-		$out      = '';
-		$extended = false;
-		$icc      = false;
-		$profile  = '';
-		$alpha    = false;
-		$image    = false;
-		$flags    = 0;
-		$canvas   = array();
+		$offset      = 12;
+		$out         = '';
+		$extended    = false;
+		$icc         = false;
+		$profile     = '';
+		$alpha       = false;
+		$image       = false;
+		$flags       = 0;
+		$canvas      = array();
+		$orientation = 1;
+		$exif        = false;
 		while ( $offset < $length ) {
 			self::require_structure( $offset + 8 <= $length );
 			$type = substr( $bytes, $offset, 4 );
@@ -365,6 +373,11 @@ final class Image_Metadata {
 			$end  = $offset + 8 + $size + $size % 2;
 			self::require_structure( $end <= $length && ( ! ( $size % 2 ) || "\0" === $bytes[ $end - 1 ] ) );
 			$payload = substr( $bytes, $offset + 8, $size );
+			if ( 'EXIF' === $type ) {
+				self::require_structure( ! $exif );
+				$orientation = self::orientation( "Exif\0\0" === substr( $payload, 0, 6 ) ? substr( $payload, 6 ) : $payload );
+				$exif        = true;
+			}
 			if ( 'VP8X' === $type ) {
 				self::require_structure( 12 === $offset && ! $extended && 10 === $size && 0 === ( ord( $payload[0] ) & 0xc3 ) && "\0\0\0" === substr( $payload, 1, 3 ) );
 				$flags      = ord( $payload[0] );
@@ -409,7 +422,7 @@ final class Image_Metadata {
 		}
 		return array(
 			'bytes'       => 'RIFF' . pack( 'V', strlen( $out ) + 4 ) . 'WEBP' . $out,
-			'orientation' => 1,
+			'orientation' => $orientation,
 			'icc'         => $profile,
 		);
 	}
@@ -476,18 +489,19 @@ final class Image_Metadata {
 	}
 
 	/**
-	 * Normalize JPEG pixels once, then sanitize the encoder's output too.
+	 * Normalize supported pixels once, then sanitize the encoder's output too.
 	 *
 	 * @param string $path Validated private source.
 	 * @param array  $source Parsed source and compatible ICC segments.
+	 * @param string $mime Validated source MIME, preserved by the editor.
 	 * @return array|WP_Error
 	 */
-	private static function orient( $path, array $source ) {
+	private static function orient( $path, array $source, $mime ) {
 		$editor = wp_get_image_editor( $path );
 		if ( is_wp_error( $editor ) ) {
 			return self::error();
 		}
-		if ( 4 === $source['channels'] && $editor instanceof \WP_Image_Editor_GD ) {
+		if ( 'image/jpeg' === $mime && 4 === $source['channels'] && $editor instanceof \WP_Image_Editor_GD ) {
 			return new WP_Error( 'zmai_metadata_cmyk', __( 'This server cannot safely normalize this CMYK JPEG. Convert it to RGB and try again.', 'author-or-user-image' ) );
 		}
 		$orientation = $source['orientation'];
@@ -524,25 +538,36 @@ final class Image_Metadata {
 		if ( ! $temporary ) {
 			return self::error();
 		}
-		$output = $temporary . '.jpg';
-		$pin    = static function () {
+		$extensions = array(
+			'image/jpeg' => '.jpg',
+			'image/png'  => '.png',
+			'image/webp' => '.webp',
+		);
+		$output     = $temporary . $extensions[ $mime ];
+		$pin        = static function () {
 			return array();
 		};
 		add_filter( 'image_editor_output_format', $pin, PHP_INT_MAX );
 		try {
-			$saved = $editor->save( $output, 'image/jpeg' );
+			$saved = $editor->save( $output, $mime );
 			if ( is_wp_error( $saved ) || empty( $saved['path'] ) || $saved['path'] !== $output ) {
 				return self::error();
 			}
-			$normalized = self::jpeg( self::read( $output ) );
-			if ( $source['channels'] !== $normalized['channels'] ) {
+			$normalized = self::parse( self::read( $output ), $mime );
+			if ( 'image/jpeg' === $mime && $source['channels'] !== $normalized['channels'] ) {
 				return self::error();
 			}
-			if ( 3 === $source['channels'] ) {
+			if ( 'image/jpeg' === $mime && 3 === $source['channels'] ) {
 				// GD drops profiles; Imagick may write its own profile. Attach the
 				// source RGB ICC exactly once, only when the pixel color space agrees.
 				$normalized          = self::jpeg( self::read( $output ), false );
 				$normalized['bytes'] = "\xff\xd8" . $source['icc'] . substr( $normalized['bytes'], 2 );
+			} elseif ( 'image/jpeg' !== $mime && '' !== $source['icc'] ) {
+				$valid = Image_Processor::validate_local_image( $output, basename( $output ) );
+				if ( is_wp_error( $valid ) || $valid['type'] !== $mime ) {
+					return self::error();
+				}
+				$normalized = self::with_profile( $normalized, $valid, $source['icc'] );
 			}
 			$normalized['orientation']       = 1;
 			$normalized['input_orientation'] = $orientation;

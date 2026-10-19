@@ -4,13 +4,13 @@
  * removal including duplicates, ICC and alpha retention, and typed rejection of
  * malformed RIFF chunk length, chunk padding and RIFF size.
  *
- * Fixtures are generated at runtime into the fix3 scratch fixtures directory.
+ * Fixtures are generated at runtime into the external scratch fixtures directory.
  * Run with WP-CLI eval-file after tests/candidate-bootstrap.php.
  */
 
 if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'local' !== wp_get_environment_type() || ! is_file( ABSPATH . '.zmai-test-instance' ) ) { throw new RuntimeException( 'Disposable local WordPress required.' ); }
 
-const ZMAI_W_FIXTURES = '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/fix3/fixtures';
+define( 'ZMAI_W_FIXTURES', sys_get_temp_dir() . '/fixtures' );
 const ZMAI_W_ICC      = '/System/Library/ColorSync/Profiles/sRGB Profile.icc';
 const ZMAI_W_CLASS    = 'AuthorOrUserImage\\Image_Metadata';
 
@@ -209,11 +209,11 @@ $source  = zmai_w_source_webp();
 $decoded = zmai_w_decode( $source );
 zmai_w_check( null !== $decoded && 40 === $decoded[0] && 30 === $decoded[1] && $decoded[2] >= 100 && $decoded[3] <= 20, 'GD source fixture is 40x30 with alpha' );
 
-// Case 1: EXIF, XMP, duplicate EXIF/XMP (odd length), ICCP and alpha.
+// Case 1: valid TIFF EXIF, duplicate XMP (odd length), ICCP and alpha.
+$exif_tiff = 'II' . pack( 'vVvV', 42, 8, 0, 0 );
 $meta_full = array(
-	array( 'EXIF', 'Exif\0\0gps-private' ),
+	array( 'EXIF', "Exif\0\0" . $exif_tiff ),
 	array( 'XMP ', '<x:xmpmeta>gps-private</x:xmpmeta>' ),
-	array( 'EXIF', 'exif-duplicate' ),
 	array( 'XMP ', 'xmp-duplicate-odd' ),
 );
 $input = zmai_w_extended( $source, true, $meta_full );
@@ -232,10 +232,9 @@ foreach ( array( 'ALPH', 'VP8 ', 'VP8L' ) as $f ) {
 }
 zmai_w_check( $same, 'ALPH and VP8 rendering payloads are byte-identical to input' );
 
-// Case 2: duplicate descriptive chunks only, no ICC.
+// Case 2: bare TIFF EXIF and duplicate XMP, no ICC. Duplicate EXIF is ambiguous and rejected by the orientation suite.
 $meta_dup = array(
-	array( 'EXIF', 'exif-one' ),
-	array( 'EXIF', 'exif-two' ),
+	array( 'EXIF', $exif_tiff ),
 	array( 'XMP ', 'xmp-one' ),
 	array( 'XMP ', 'xmp-two' ),
 );

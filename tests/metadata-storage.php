@@ -7,7 +7,7 @@ require_once __DIR__ . '/metadata-fixtures.php';
 require_once __DIR__ . '/migration-upload-transport.php';
 
 function zmai_ms_source( $width = 120, $height = 80 ) {
-	$path = '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/fix3/fixtures/storage-' . wp_generate_uuid4() . '.jpg';
+	$path = sys_get_temp_dir() . '/fixtures/storage-' . wp_generate_uuid4() . '.jpg';
 	wp_mkdir_p( dirname( $path ) );
 	$im = imagecreatetruecolor( $width, $height );
 	imagefilledrectangle( $im, 0, 0, $width - 1, $height - 1, imagecolorallocate( $im, 240, 30, 50 ) );

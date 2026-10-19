@@ -138,10 +138,10 @@ final class Migration {
 					return $job;
 				}
 				if ( $job && $token === $job['id'] ) {
-					return $job;
+					return $source === $job['source'] ? $job : $this->import_error( 'request' );
 				}
 				if ( ( $job ? $job['revision'] : 0 ) !== $revision ) {
-					return $job ? $job : $this->import_error( 'request' );
+					return $this->import_error( 'request' );
 				}
 				if ( $job && 'complete' !== $job['state'] ) {
 					return $this->import_error( 'active' );

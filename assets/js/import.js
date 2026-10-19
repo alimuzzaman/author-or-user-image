@@ -14,13 +14,19 @@
 			if (target) { target.textContent = String(job.counts[key]); }
 		});
 	}
-	async function post(url, fields) {
+	async function post(url, fields, binding) {
 		fields.set('format', 'json');
 		var response = await fetch(url, {method: 'POST', credentials: 'same-origin', body: fields});
 		var result = await response.json();
 		if (!response.ok || !result.success || !result.data || !result.data.job) {
 			throw new Error('import-stopped');
 		}
+		var job = result.data.job;
+		if (job.id !== binding.id || String(job.site_id) !== binding.site ||
+			typeof job.source !== 'string' || !job.source || (binding.source !== null && job.source !== binding.source)) {
+			throw new Error('import-conflict');
+		}
+		binding.source = job.source;
 		show(result.data.job);
 		return result.data;
 	}
@@ -32,6 +38,12 @@
 		working = true;
 		stopRequested = false;
 		var fields = new FormData(form);
+		var starting = fields.get('action') === 'zmai_import_start';
+		var binding = {
+			id: fields.get(starting ? 'run_token' : 'job_id'),
+			site: fields.get('site_id'),
+			source: starting ? fields.get('source') : null
+		};
 		var url = form.getAttribute('action');
 		// Disable native submit inputs, buttons and the source selection during the run.
 		root.querySelectorAll('button, input[type="submit"], select').forEach(function (control) { control.disabled = true; });
@@ -45,7 +57,7 @@
 		stopButton.addEventListener('click', function () { stopRequested = true; stopButton.disabled = true; });
 		root.appendChild(stopButton);
 		try {
-			var data = await post(url, fields);
+			var data = await post(url, fields, binding);
 			while (data.job.state === 'running') {
 				fields = new FormData();
 				var operation = stopRequested ? 'pause' : 'batch';
@@ -54,7 +66,7 @@
 				fields.set('job_id', data.job.id);
 				fields.set('revision', String(data.job.revision));
 				fields.set('_wpnonce', data.nonces[operation]);
-				data = await post(url, fields);
+				data = await post(url, fields, binding);
 			}
 			// Reload the server-rendered native controls at the persisted terminal state.
 			window.location.reload();

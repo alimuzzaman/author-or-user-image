@@ -31,22 +31,51 @@ The workflow recursively lints production PHP, including future PHP below `block
 
 ## Run Plugin Check on the exact ZIP
 
-Use a disposable local site with Plugin Check 2.1.0 installed. Pass the ZIP path as the
-plugin argument so the checker reads the package that will be deployed. Load the
-Plugin Check CLI file through WP-CLI's early `--require` option to include its
-runtime checks:
+Use a disposable local site with Plugin Check 2.1.0 installed. Extract the exact
+ZIP into a new, empty directory outside the worktree. This checker version
+accepts an installed plugin or directory, but cannot check a local ZIP argument.
+The archive built above has flat member paths, so its extraction directory must
+be named `author-or-user-image`.
 
 ```sh
 WP_ROOT=/absolute/path/to/disposable/wordpress
+PACKAGE_DIR=/absolute/path/outside/worktree/extracted/author-or-user-image
 PCP_CLI="$WP_ROOT/wp-content/plugins/plugin-check/cli.php"
-wp plugin check "$PACKAGE_ZIP" \
+mkdir "$PACKAGE_DIR"
+unzip -q "$PACKAGE_ZIP" -d "$PACKAGE_DIR"
+shasum -a 256 "$PACKAGE_ZIP"
+python3 - "$PACKAGE_ZIP" "$PACKAGE_DIR" <<'PYVERIFY'
+import hashlib, pathlib, sys, zipfile
+root = pathlib.Path(sys.argv[2])
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    names = [item.filename for item in archive.infolist() if not item.is_dir()]
+    assert len(names) == len(set(names))
+    assert all(not pathlib.PurePosixPath(n).is_absolute() and
+               ".." not in pathlib.PurePosixPath(n).parts for n in names)
+    assert sorted(names) == sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+    for name in names:
+        target = root / name
+        assert not target.is_symlink()
+        assert hashlib.sha256(archive.read(name)).digest() == hashlib.sha256(target.read_bytes()).digest(), name
+print("PASS exact ZIP member set and SHA-256 hashes")
+PYVERIFY
+# The disposable site must have no existing plugin at this destination.
+ln -s "$PACKAGE_DIR" "$WP_ROOT/wp-content/plugins/author-or-user-image"
+wp plugin activate author-or-user-image --path="$WP_ROOT"
+wp eval 'echo realpath(ZMAI_PATH), " ", hash_file("sha256", ZMAI_PATH . "author_image.php"), PHP_EOL;' --path="$WP_ROOT"
+wp plugin check author-or-user-image \
   --require="$PCP_CLI" \
-  --format=table \
+  --mode=update --include-experimental --format=json \
   --path="$WP_ROOT"
 ```
 
-Review every result. Record warnings and failures with the exact package digest.
-Do not treat a clean static scan as runtime coverage.
+Load the Plugin Check CLI file through WP-CLI's early `--require` option to
+include runtime checks. Retain the ZIP digest, member hash verification, loaded
+plugin path and checker output. Confirm the loaded path is the extracted
+directory. The gate runner uses this same extraction, byte comparison, installed
+slug and runtime bootstrap, then restores its disposable fixture's prior symlink.
+Review every warning and failure. Do not treat a clean static scan as runtime
+coverage.
 
 ## Check PHP and WordPress compatibility
 

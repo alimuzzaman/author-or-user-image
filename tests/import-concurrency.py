@@ -3,9 +3,9 @@
 import argparse, json, subprocess, time, os, uuid
 from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('--site',required=True);p.add_argument('--plugin',required=True);p.add_argument('--php',required=True);a=p.parse_args()
-root=Path('/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/3')/('workers-'+uuid.uuid4().hex);root.mkdir()
+root=Path(os.environ.get('ZMAI_TEST_SCRATCH_ROOT', '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/3'))/('workers-'+uuid.uuid4().hex);root.mkdir()
 base=[a.php,'/usr/local/bin/wp','--path='+a.site,'--require='+a.plugin+'/tests/candidate-bootstrap.php','eval-file',a.plugin+'/tests/import-worker.php']
-env=dict(os.environ,TMPDIR=str(root));failed=0;checks=0;worker=None
+env=dict(os.environ,TMPDIR=str(root),ZMAI_TEST_SCRATCH_ROOT=str(root.parent));failed=0;checks=0;worker=None
 log=(root/'commands.txt').open('w')
 def run(mode):
  cmd=base+[mode,str(root)];r=subprocess.run(cmd,text=True,capture_output=True,timeout=90,env=env)

@@ -32,7 +32,7 @@ $GLOBALS['zmai_review_failures'] = array();
 $GLOBALS['zmai_review_missing']  = array();
 $GLOBALS['zmai_review_stage']    = '';
 $GLOBALS['zmai_review_downsize'] = 0;
-$GLOBALS['zmai_review_root']     = '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/fix1/fixtures-review';
+$GLOBALS['zmai_review_root']     = sys_get_temp_dir() . '/fixtures-review';
 
 /**
  * Fake editor: a real GD editor whose square saves can be forced to fail.

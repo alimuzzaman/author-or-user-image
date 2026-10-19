@@ -228,7 +228,7 @@ function zmai_meta_finish() {
 	WP_CLI::halt( ( $GLOBALS['zmai_meta_failures'] || $GLOBALS['zmai_meta_missing'] ) ? 1 : 0 );
 }
 
-$zmai_meta_root = '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/fix3';
+$zmai_meta_root = sys_get_temp_dir();
 
 if ( ! function_exists( 'imagejpeg' ) || ! function_exists( 'imagecreatefromjpeg' ) ) {
 	zmai_meta_missing( 'GD JPEG support', 'imagejpeg/imagecreatefromjpeg not loaded; fixture cannot be built' );

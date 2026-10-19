@@ -8,7 +8,7 @@ require_once ABSPATH . 'wp-admin/includes/user.php';
 if ( is_multisite() ) { require_once ABSPATH . 'wp-admin/includes/ms.php'; }
 $mode = $args[0] ?? '';
 $directory = $args[1] ?? '';
-$root = realpath( '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/3' );
+$root = realpath( getenv( 'ZMAI_TEST_SCRATCH_ROOT' ) ?: '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/3' );
 $real = realpath( $directory );
 if ( ! $root || ! $real || 0 !== strpos( $real, $root . DIRECTORY_SEPARATOR ) ) { throw new RuntimeException( 'External marked scratch required.' ); }
 $state_file = $real . '/state.json';

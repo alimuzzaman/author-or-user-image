@@ -10,7 +10,7 @@ use AuthorOrUserImage\Image_Metadata;
 $GLOBALS['zmo_checks']   = 0;
 $GLOBALS['zmo_failures'] = array();
 $GLOBALS['zmo_missing']  = array();
-$GLOBALS['zmo_fixtures'] = '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/fix3/fixtures';
+$GLOBALS['zmo_fixtures'] = sys_get_temp_dir() . '/fixtures';
 $GLOBALS['zmo_icc_path'] = '/System/Library/ColorSync/Profiles/sRGB Profile.icc';
 
 /** Record one check and echo PASS or FAIL.
@@ -37,7 +37,7 @@ function zmo_missing( $label ) {
 	echo 'MISSING ' . $label . "\n";
 }
 
-/** Build a unique fixture path inside the approved fix3 fixtures directory.
+/** Build a unique fixture path inside the approved external scratch fixtures directory.
  *
  * @param string $label Fixture label.
  * @param string $extension Filename extension.
@@ -317,6 +317,94 @@ function zmo_check_icc( $backend ) {
 	}
 }
 
+/** Encode one metadata chunk independently of the production parser. */
+function zmo_chunk( $type, $payload, $format ) {
+	if ( 'png' === $format ) {
+		return pack( 'N', strlen( $payload ) ) . $type . $payload . hash( 'crc32b', $type . $payload, true );
+	}
+	return $type . pack( 'V', strlen( $payload ) ) . $payload . ( strlen( $payload ) % 2 ? "\0" : '' );
+}
+
+/** Standards-shaped IFD0, exercising both TIFF byte orders. */
+function zmo_tiff( $orientation, $big = false ) {
+	return $big
+		? 'MM' . pack( 'nNn', 42, 8, 1 ) . pack( 'nnNnnN', 0x0112, 3, 1, $orientation, 0, 0 )
+		: 'II' . pack( 'vVv', 42, 8, 1 ) . pack( 'vvVvvV', 0x0112, 3, 1, $orientation, 0, 0 );
+}
+
+/** Add PNG eXIf or WebP EXIF and a real ICC profile to asymmetric alpha pixels. */
+function zmo_container( $format, array $exif ) {
+	$image = imagecreatetruecolor( 16, 12 );
+	imagealphablending( $image, false );
+	imagesavealpha( $image, true );
+	$colors = array( array( 240, 20, 20, 30 ), array( 20, 220, 20, 60 ), array( 20, 20, 240, 90 ), array( 240, 220, 20, 0 ) );
+	foreach ( $colors as $i => $color ) {
+		imagefilledrectangle( $image, ( $i % 2 ) * 8, (int) ( $i / 2 ) * 6, ( $i % 2 ) * 8 + 7, (int) ( $i / 2 ) * 6 + 5, imagecolorallocatealpha( $image, $color[0], $color[1], $color[2], $color[3] ) );
+	}
+	ob_start();
+	if ( 'png' === $format ) { imagepng( $image ); } elseif ( defined( 'IMG_WEBP_LOSSLESS' ) ) { imagewebp( $image, null, IMG_WEBP_LOSSLESS ); }
+	$raw = ob_get_clean();
+	if ( 'webp' === $format && ! defined( 'IMG_WEBP_LOSSLESS' ) ) {
+		// PHP before 8.1 cannot encode lossless WebP; use the same pixels encoded by PHP 8.5 GD.
+		$raw = base64_decode( 'UklGRkYAAABXRUJQVlA4TDoAAAAvD8ACEB8gJCCMMMb/ZKJAIAlmf7YRBAJJEPuTDSMQSMQG3Cux8EzkDITZRpOc5CTvewgR/Q+ob9MP' );
+	}
+	if ( PHP_VERSION_ID < 80000 ) { imagedestroy( $image ); }
+	$profile = file_get_contents( $GLOBALS['zmo_icc_path'] );
+	$icc = zmo_chunk( 'png' === $format ? 'iCCP' : 'ICCP', 'png' === $format ? "sRGB\0\0" . gzcompress( $profile ) : $profile, $format );
+	$metadata = '';
+	foreach ( $exif as $payload ) { $metadata .= zmo_chunk( 'png' === $format ? 'eXIf' : 'EXIF', $payload, $format ); }
+	if ( 'png' === $format ) {
+		return array( $raw, substr( $raw, 0, 33 ) . $icc . $metadata . substr( $raw, 33 ), $icc );
+	}
+	// The GD lossless source contains one VP8L rendering chunk; VP8X adds canvas and metadata flags.
+	$body = zmo_chunk( 'VP8X', "\x38\0\0\0\x0f\0\0\x0b\0\0", 'webp' ) . $icc . substr( $raw, 12 ) . $metadata;
+	return array( $raw, 'RIFF' . pack( 'V', strlen( $body ) + 4 ) . 'WEBP' . $body, $icc );
+}
+
+/** Non-JPEG orientation must preserve pixels, alpha, ICC, MIME and repeat-processing. */
+function zmo_check_container_orientation( $backend, $format, $orientation ) {
+	$label = $format . '_exif_orientation_applied_before_strip ' . $backend . ' ' . $orientation;
+	$tiff = zmo_tiff( $orientation, 0 === $orientation % 2 );
+	// WebP producers use both bare TIFF and the optional Exif header.
+	$payload = 'webp' === $format && 1 === $orientation % 2 ? "Exif\0\0" . $tiff : $tiff;
+	list( $raw, $tagged, $icc ) = zmo_container( $format, array( $payload ) );
+	$source = zmo_path( 'source', $format ); file_put_contents( $source, $tagged );
+	$stage = zmo_path( 'stage', $format ); copy( $source, $stage );
+	$result = Image_Metadata::sanitize( $stage, basename( $stage ), array( 'owner' => 1, 'source' => 'upload' ) );
+	zmo_expect( hash_file( 'sha256', $source ) === hash( 'sha256', $tagged ), $label . ' source unchanged' );
+	if ( ! zmo_expect( is_array( $result ), $label . ' returns descriptor' ) ) { return; }
+	$swap = $orientation >= 5;
+	zmo_expect( $result['width'] === ( $swap ? 12 : 16 ) && $result['height'] === ( $swap ? 16 : 12 ) && $result['type'] === 'image/' . $format, $label . ' dimensions and MIME' );
+	$out = imagecreatefromstring( file_get_contents( $stage ) ); $reference = imagecreatefromstring( $raw );
+	$match = true; $alpha = true;
+	foreach ( array( array( 2, 2 ), array( imagesx( $out ) - 3, 2 ), array( 2, imagesy( $out ) - 3 ), array( imagesx( $out ) - 3, imagesy( $out ) - 3 ) ) as $point ) {
+		$from = zmo_source_point( $orientation, $point[0], $point[1], 16, 12 );
+		if ( $from[0] < 0 || $from[1] < 0 || $from[0] >= 16 || $from[1] >= 12 ) { $match = false; $alpha = false; continue; }
+		$match = $match && zmo_pixels_near( zmo_rgb( $out, $point[0], $point[1] ), zmo_rgb( $reference, $from[0], $from[1] ), 30 );
+		$a = imagecolorsforindex( $out, imagecolorat( $out, $point[0], $point[1] ) );
+		$b = imagecolorsforindex( $reference, imagecolorat( $reference, $from[0], $from[1] ) );
+		$alpha = $alpha && abs( $a['alpha'] - $b['alpha'] ) <= 2;
+	}
+	zmo_expect( $match, $label . ' mirrored and rotated asymmetric pixels' );
+	zmo_expect( $alpha, $label . ' transparency' );
+	$bytes = file_get_contents( $stage );
+	zmo_expect( false === strpos( $bytes, 'png' === $format ? 'eXIf' : 'EXIF' ), $label . ' EXIF removed' );
+	zmo_expect( 1 === substr_count( $bytes, $icc ) && $result['metadata_icc'] === $icc, $label . ' ICC bytes retained once' );
+	$again = Image_Metadata::sanitize( $stage, basename( $stage ), array( 'owner' => 1, 'source' => 'upload' ) );
+	zmo_expect( is_array( $again ) && $bytes === file_get_contents( $stage ), $label . ' repeated sanitation byte-identical, no double rotation' );
+	if ( PHP_VERSION_ID < 80000 ) { imagedestroy( $out ); imagedestroy( $reference ); }
+}
+
+/** Ambiguous or malformed TIFF must fail before overwriting staged bytes. */
+function zmo_check_container_errors( $format ) {
+	foreach ( array( 'truncated' => array( 'II*' ), 'invalid-orientation' => array( zmo_tiff( 9 ) ), 'duplicate-exif' => array( zmo_tiff( 6 ), zmo_tiff( 8 ) ) ) as $name => $exif ) {
+		list( $raw, $bytes ) = zmo_container( $format, $exif );
+		$path = zmo_path( $name, $format ); file_put_contents( $path, $bytes );
+		$result = Image_Metadata::sanitize( $path, basename( $path ), array( 'owner' => 1, 'source' => 'upload' ) );
+		zmo_expect( is_wp_error( $result ) && 'zmai_metadata_failed' === $result->get_error_code() && $bytes === file_get_contents( $path ), $format . ' ' . $name . ' typed failure preserves staging' );
+	}
+}
+
 /** Run the full orientation and ICC matrix with one editor forced.
  *
  * @param string $backend Editor name: GD or Imagick.
@@ -330,6 +418,10 @@ function zmo_run_backend( $backend ) {
 		zmo_check_orientation( $backend, $orientation );
 	}
 	zmo_check_icc( $backend );
+	foreach ( array( 'png', 'webp' ) as $format ) {
+		for ( $orientation = 2; $orientation <= 8; ++$orientation ) { zmo_check_container_orientation( $backend, $format, $orientation ); }
+		zmo_check_container_errors( $format );
+	}
 	remove_filter( 'wp_image_editors', $only, PHP_INT_MAX );
 }
 

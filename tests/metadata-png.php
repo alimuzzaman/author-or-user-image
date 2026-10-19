@@ -3,7 +3,7 @@
  * PNG metadata sanitation: an independent chunk walk against Image_Metadata::sanitize().
  *
  * Run through WP-CLI eval-file with the candidate bootstrap. Fixtures are written
- * only under the fix3 scratch fixtures directory.
+ * only under the external scratch fixtures directory.
  *
  * @package AuthorOrUserImage
  */
@@ -15,7 +15,7 @@ function zmai_png_check( $ok, $label ) {
 }
 
 function zmai_png_dir() {
-	$dir = '/Users/alim/Sites/git/.scratch/author-or-user-image/v3.1/fix3/fixtures';
+	$dir = sys_get_temp_dir() . '/fixtures';
 	wp_mkdir_p( $dir );
 	return $dir;
 }

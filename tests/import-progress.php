@@ -37,6 +37,13 @@ try {
 	zmai_it_check( $job === $replay, 'start run token replay is idempotent' );
 	$conflict = $migration->start_import( 'one-user-avatar', wp_generate_uuid4(), $job['revision'] );
 	zmai_it_check( is_wp_error( $conflict ), 'active job cannot switch sources' );
+	$stale_start = $migration->start_import( 'one-user-avatar', wp_generate_uuid4(), 0 );
+	zmai_it_check( is_wp_error( $stale_start ) && 'zmai_import_request' === $stale_start->get_error_code() && $job === $migration->import_status(), 'stale_start_does_not_continue_other_source: typed conflict leaves job and counts unchanged' );
+	$controller = new AuthorOrUserImage\Import_Admin( $migration );
+	$stale_response = $controller->process_request( 'start', array( 'site_id' => (string) get_current_blog_id(), 'revision' => '0', 'source' => 'one-user-avatar', 'run_token' => wp_generate_uuid4(), '_wpnonce' => wp_create_nonce( 'zmai_import_start' ) ), 'POST' );
+	zmai_it_check( is_wp_error( $stale_response ) && $job === $migration->import_status() && 0 === $store->get_user_attachment_id( $users[47] ), 'stale_start_does_not_continue_other_source: admin dispatch returns no successful job or imported media' );
+	$wrong_source_replay = $migration->start_import( 'one-user-avatar', $token, 0 );
+	zmai_it_check( is_wp_error( $wrong_source_replay ) && $job === $migration->import_status(), 'Start token replay cannot change its bound source' );
 	$late = zmai_it_user(); update_user_meta( $late, 'wp_user_avatars', array( 'full' => $file['url'] ) );
 	$upper = $job['upper_user_id'];
 	$first = $migration->run_import_batch( $job['id'], $job['revision'] );

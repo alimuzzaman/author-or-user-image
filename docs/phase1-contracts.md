@@ -72,11 +72,12 @@ The PHP-only filter `zmai_strip_image_metadata` receives default `true` and
 only for that operation, after validation. Request fields and competitor data
 cannot control it. It never changes `image_strip_meta` or other uploads.
 
-Default processing applies JPEG orientation 2-8 to pixels once, then parses
+Default processing applies JPEG, PNG eXIf and WebP EXIF orientation 2-8
+to pixels once, including mirrored orientations, then parses
 and removes descriptive metadata before any media handler sees the file.
 Structured JPEG/PNG/WebP parsing rejects malformed bounds and verifies its
 own output. Only rendering structures, alpha and ICC color data survive.
-RGB ICC segments survive JPEG orientation re-encoding; GD rejects CMYK,
+RGB ICC data survives orientation re-encoding in all supported formats; GD rejects CMYK,
 including PHP opt-out, rather than attaching a CMYK profile to RGB pixels. Sanitizer failures
 return typed errors and cannot replace an existing mapping. Imports and legacy
 migration sanitize only private copies, leaving source files and meta intact.
