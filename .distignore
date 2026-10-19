@@ -1,0 +1,14 @@
+# Keep blocks/ and all runtime assets in the release; exclude development and gallery sources.
+/.git
+/.github
+/.gitignore
+/.distignore
+/composer.json
+/composer.lock
+/node_modules
+/phpcs.xml.dist
+/vendor
+/tests
+/tools
+/docs
+/.wordpress-org

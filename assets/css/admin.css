@@ -1,0 +1,36 @@
+.zmai-wrap .zmai-card {
+	max-width: 760px;
+	margin-top: 20px;
+	padding: 20px;
+	border: 1px solid #c3c4c7;
+	background: #fff;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, .04);
+}
+
+.zmai-avatar-preview {
+	display: block;
+	max-width: 200px;
+	height: auto;
+	margin: 12px 0;
+	object-fit: cover;
+	border-radius: 4px;
+}
+
+.zmai-form {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 16px 0 0;
+}
+
+.zmai-form .submit {
+	margin: 0;
+	padding: 0;
+}
+
+@media screen and (max-width: 782px) {
+	.zmai-form {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+}

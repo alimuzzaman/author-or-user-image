@@ -1,0 +1,14 @@
+{
+  "name": "author-or-user-image-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test --grep-invert @screenshots",
+    "screenshots": "playwright test --grep @screenshots",
+    "test:local": "node run-local.mjs",
+    "screenshots:local": "node run-local.mjs --screenshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  }
+}

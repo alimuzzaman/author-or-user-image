@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+<title id="title">Author or User Image</title>
+<desc id="desc">An avatar inside a rounded picture frame, with a gold upload arrow badge.</desc>
+<rect width="256" height="256" rx="54" fill="#103f42"/>
+<path d="M190 51H70a19 19 0 0 0-19 19v116a19 19 0 0 0 19 19h74" fill="none" stroke="#93d8c2" stroke-width="10" stroke-linecap="round"/>
+<circle cx="121" cy="100" r="26" fill="#f7faf4"/>
+<path d="M77 174c0-24 19-40 44-40s44 16 44 40v5H77z" fill="#f7faf4"/>
+<circle cx="191" cy="191" r="41" fill="#103f42"/>
+<circle cx="191" cy="191" r="33" fill="#f3c66d"/>
+<path d="M191 208v-34m-13 13 13-13 13 13" fill="none" stroke="#103f42" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="190" cy="51" r="5" fill="#f3c66d"/>
+</svg>
