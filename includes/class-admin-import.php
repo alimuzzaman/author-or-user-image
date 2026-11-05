@@ -11,7 +11,7 @@ use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
 
-/** Users > Import avatars, with no import work on admin_init. */
+/** Users > Avatar Migration, with no import work on admin_init. */
 final class Import_Admin {
 	/**
 	 * Explicit job coordinator.
@@ -53,7 +53,30 @@ final class Import_Admin {
 	 * @return void
 	 */
 	public function add_menu() {
-		add_users_page( __( 'Import avatars', 'author-or-user-image' ), __( 'Import avatars', 'author-or-user-image' ), 'manage_options', 'author-or-user-image-import', array( $this, 'render_page' ) );
+		if ( ! current_user_can( 'manage_options' ) || is_network_admin() ) {
+			return;
+		}
+		$hook = add_users_page( __( 'Avatar Migration', 'author-or-user-image' ), __( 'Avatar Migration', 'author-or-user-image' ), 'manage_options', 'author-or-user-image-import', array( $this, 'render_page' ) );
+		add_action( 'load-' . $hook, array( $this, 'set_page_title' ) );
+		$job = $this->migration->import_status();
+		if ( is_wp_error( $job ) || ( $job && 'complete' !== $job['state'] ) || get_option( Migration::RELEASE_FAILED_OPTION ) ) {
+			return;
+		}
+		if ( array() === ( new Import_Sources() )->detected_sources() ) {
+			// Keep the page registered so Avatar Management and saved URLs can open it.
+			remove_submenu_page( 'users.php', 'author-or-user-image-import' );
+		}
+	}
+
+	/**
+	 * Retain the document title even when the submenu entry is hidden.
+	 *
+	 * @return void
+	 */
+	public function set_page_title() {
+		global $title;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Core reads this screen title after the hidden submenu's load hook.
+		$title = __( 'Avatar Migration', 'author-or-user-image' );
 	}
 
 	/**
@@ -63,8 +86,12 @@ final class Import_Admin {
 	 * @return void
 	 */
 	public function enqueue( $hook ) {
-		if ( 'users_page_author-or-user-image-import' === $hook && current_user_can( 'manage_options' ) ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only navigation selects the enhanced management tab.
+		$management_tab = 'users_page_author-or-user-image-manage' === $hook && isset( $_GET['tab'] ) && 'migration' === $_GET['tab'];
+		if ( ( 'users_page_author-or-user-image-import' === $hook || $management_tab ) && current_user_can( 'manage_options' ) ) {
+			wp_enqueue_style( 'zmai-admin', plugins_url( 'assets/css/admin.css', ZMAI_PATH . 'author_image.php' ), array(), ZMAI_VERSION );
 			wp_enqueue_script( 'zmai-import', plugins_url( 'assets/js/import.js', ZMAI_PATH . 'author_image.php' ), array(), ZMAI_VERSION, true );
+			wp_localize_script( 'zmai-import', 'zmaiImportStates', $this->state_labels() );
 		}
 	}
 
@@ -146,7 +173,7 @@ final class Import_Admin {
 		if ( $failed && in_array( $result->get_error_code(), array( 'zmai_import_forbidden', 'zmai_import_nonce', 'zmai_import_request' ), true ) ) {
 			wp_die( esc_html__( 'You cannot run this import request.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
 		}
-		$url = admin_url( 'users.php?page=author-or-user-image-import' );
+		$url = admin_url( 'users.php?page=author-or-user-image-manage&tab=migration' );
 		wp_safe_redirect( $failed ? add_query_arg( 'import_error', '1', $url ) : $url, 303 );
 		exit;
 	}
@@ -154,16 +181,19 @@ final class Import_Admin {
 	/**
 	 * Render persisted status and explicit native actions; a GET never imports.
 	 *
+	 * @param bool $embedded Render inside the Avatar Management tab.
 	 * @return void
 	 */
-	public function render_page() {
+	public function render_page( $embedded = false ) {
 		if ( ! current_user_can( 'manage_options' ) || is_network_admin() ) {
 			wp_die( esc_html__( 'You cannot access this page.', 'author-or-user-image' ), '', array( 'response' => 403 ) );
 		}
 		$job = $this->migration->import_status();
-		echo '<div class="wrap" data-zmai-import data-stop-label="' . esc_attr__( 'Stop', 'author-or-user-image' ) . '" data-error-label="' . esc_attr__( 'Import stopped. Reload this page before continuing. Retained locks may need administrator recovery.', 'author-or-user-image' ) . '"><h1>' . esc_html__( 'Import avatars', 'author-or-user-image' ) . '</h1>';
-		echo '<p>' . esc_html__( 'Import one source at a time. The first imported fallback wins; existing avatars, explicit removals and blocked users are preserved. Only local uploads files are supported. Source metadata, settings and files are never changed.', 'author-or-user-image' ) . '</p>';
-		echo '<p>' . esc_html__( 'Imports copy files and use additional disk space. Avatar ratings, defaults and override preferences are not migrated. Other plugins may continue overriding displayed avatars. Review results, then manually disable their avatar override if needed. Erasing an imported image does not erase the source plugin data.', 'author-or-user-image' ) . '</p>';
+		echo '<div class="' . ( $embedded ? 'zmai-wrap zmai-migration' : 'wrap zmai-wrap zmai-migration' ) . '" data-zmai-import data-stop-label="' . esc_attr__( 'Stop', 'author-or-user-image' ) . '" data-error-label="' . esc_attr__( 'Import stopped. Reload this page before continuing. Retained locks may need administrator recovery.', 'author-or-user-image' ) . '">';
+		if ( ! $embedded ) {
+			echo '<h1>' . esc_html__( 'Avatar Migration', 'author-or-user-image' ) . '</h1>';
+		}
+		echo '<p>' . esc_html__( 'Bring over avatars from another plugin. Existing avatars, explicit removals and blocked users are preserved.', 'author-or-user-image' ) . '</p>';
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- A fixed flag renders a generic notice only, with no state mutation or reflected value.
 		if ( isset( $_GET['import_error'] ) ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Import stopped. Review the stored progress and restore missing files locally before retrying. Retained locks require operator reconciliation.', 'author-or-user-image' ) . '</p></div>';
@@ -172,11 +202,18 @@ final class Import_Admin {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Import state is unavailable or needs recovery. Ask the administrator to reconcile its schema and retained locks. No import was started.', 'author-or-user-image' ) . '</p></div></div>';
 			return;
 		}
-		echo '<div aria-live="polite" aria-atomic="true" data-zmai-progress><p>' . esc_html__( 'State:', 'author-or-user-image' ) . ' <strong data-zmai-state>' . esc_html( $job ? $job['state'] : 'idle' ) . '</strong></p>';
+		if ( ! $job || 'complete' === $job['state'] ) {
+			$this->render_sources( $job );
+		}
+
+		$states = $this->state_labels();
+		$state  = $job ? $job['state'] : 'idle';
+		echo '<section class="zmai-card" data-zmai-progress' . ( $job ? '' : ' hidden' ) . '>';
+		echo '<div aria-live="polite" aria-atomic="true"><h2 data-zmai-state>' . esc_html( $states[ $state ] ) . '</h2>';
 		$counts = $job ? $job['counts'] : array_fill_keys( array( 'inspected', 'imported', 'existing', 'suppressed', 'blocked', 'no_source', 'other_site', 'failed', 'skipped' ), 0 );
 		$labels = array(
-			'inspected'  => __( 'Inspected', 'author-or-user-image' ),
-			'imported'   => __( 'Imported', 'author-or-user-image' ),
+			'inspected'  => __( 'Users checked', 'author-or-user-image' ),
+			'imported'   => __( 'Avatars imported', 'author-or-user-image' ),
 			'existing'   => __( 'Existing', 'author-or-user-image' ),
 			'suppressed' => __( 'Explicit choice or no longer a member', 'author-or-user-image' ),
 			'blocked'    => __( 'Blocked', 'author-or-user-image' ),
@@ -185,11 +222,21 @@ final class Import_Admin {
 			'failed'     => __( 'Temporary failures; retry', 'author-or-user-image' ),
 			'skipped'    => __( 'Unsupported or missing files; repair before a new import', 'author-or-user-image' ),
 		);
-		echo '<ul>';
-		foreach ( $counts as $key => $count ) {
-			echo '<li>' . esc_html( $labels[ $key ] ) . ': <span data-zmai-count="' . esc_attr( $key ) . '">' . esc_html( (string) $count ) . '</span></li>';
+		echo '<dl class="zmai-migration-counts">';
+		foreach ( array( 'inspected', 'imported' ) as $key ) {
+			$this->render_count( $key, $labels[ $key ], $counts[ $key ] );
 		}
-		echo '</ul><p data-zmai-message>' . esc_html__( 'Work runs only after an explicit action on this page. Closing the page stops further batches. Reopen and choose Continue or Resume.', 'author-or-user-image' ) . '</p></div>';
+		echo '</dl></div>';
+		if ( 'complete' === $state && $counts['inspected'] > 0 && $counts['inspected'] === $counts['no_source'] ) {
+			echo '<p>' . esc_html__( 'No source image was available for any of the checked users.', 'author-or-user-image' ) . '</p>';
+		}
+		echo '<details><summary>' . esc_html__( 'Detailed breakdown', 'author-or-user-image' ) . '</summary><dl class="zmai-migration-counts">';
+		foreach ( $labels as $key => $label ) {
+			if ( ! in_array( $key, array( 'inspected', 'imported' ), true ) ) {
+				$this->render_count( $key, $label, $counts[ $key ] );
+			}
+		}
+		echo '</dl></details>';
 		if ( $job && $job['skips'] ) {
 			echo '<h2>' . esc_html__( 'Skipped users', 'author-or-user-image' ) . '</h2><p>' . esc_html__( 'The first 100 skipped users and reason codes are listed below. Repair their source files, then start a new import. Counts include all skipped users.', 'author-or-user-image' ) . '</p><ul data-zmai-skips>';
 			foreach ( $job['skips'] as $skip ) {
@@ -198,10 +245,9 @@ final class Import_Admin {
 			}
 			echo '</ul>';
 		}
-		if ( ! $job || 'complete' === $job['state'] ) {
-			$this->form( 'start', $job, __( 'Import avatars', 'author-or-user-image' ) );
-		} else {
+		if ( $job && 'complete' !== $job['state'] ) {
 			echo '<p>' . esc_html( Import_Sources::registry()[ $job['source'] ] ) . '</p>';
+			echo '<p>' . esc_html__( 'Closing this page stops further batches. Reopen it to continue or resume.', 'author-or-user-image' ) . '</p><div class="zmai-migration-actions">';
 			if ( 'running' === $job['state'] ) {
 				$this->form( 'batch', $job, __( 'Continue', 'author-or-user-image' ) );
 				$this->form( 'pause', $job, __( 'Stop', 'author-or-user-image' ) );
@@ -214,8 +260,68 @@ final class Import_Admin {
 			} else {
 				echo '<p>' . esc_html__( 'Administrator recovery is required. Do not remove a live or unknown worker lock. See the lifecycle recovery guide.', 'author-or-user-image' ) . '</p>';
 			}
+			echo '</div>';
 		}
-		echo '</div>';
+		echo '</section><p data-zmai-message role="status"></p></div>';
+	}
+
+	/**
+	 * Render only detected sources, with one explicit action per source.
+	 *
+	 * @param array|null $job Persisted job.
+	 * @return void
+	 */
+	private function render_sources( $job ) {
+		$sources = ( new Import_Sources() )->detected_sources();
+		echo '<section class="zmai-card">';
+		if ( ! $sources || is_wp_error( $sources ) ) {
+			echo '<h2>' . esc_html__( 'Import sources', 'author-or-user-image' ) . '</h2>';
+		} else {
+			echo '<h2>' . esc_html( $job ? __( 'Start another import', 'author-or-user-image' ) : __( 'Import from another plugin', 'author-or-user-image' ) ) . '</h2>';
+		}
+		if ( is_wp_error( $sources ) ) {
+			echo '<p>' . esc_html__( 'Could not check for avatar sources. Reload this page to try again.', 'author-or-user-image' ) . '</p>';
+		} elseif ( ! $sources ) {
+			echo '<p>' . esc_html__( 'No supported avatar plugin or saved avatar records were detected for this site.', 'author-or-user-image' ) . '</p>';
+		} else {
+			echo '<p>' . esc_html__( 'Available sources are listed below. Local files are checked during import.', 'author-or-user-image' ) . '</p><div class="zmai-migration-actions">';
+			foreach ( $sources as $source => $name ) {
+				/* translators: %s: source plugin name. */
+				$this->form( 'start', $job, sprintf( __( 'Import from %s', 'author-or-user-image' ), $name ), $source );
+			}
+			echo '</div><details><summary>' . esc_html__( 'What gets migrated?', 'author-or-user-image' ) . '</summary>';
+			echo '<p>' . esc_html__( 'Only local avatar files are copied, which uses additional disk space. The first imported fallback wins. Source files, metadata and settings stay in place.', 'author-or-user-image' ) . '</p>';
+			echo '<p>' . esc_html__( 'Avatar ratings, defaults and override preferences stay with the source plugin. If it still overrides displayed avatars, review the results before disabling its override. Removing an imported avatar leaves the source data in place.', 'author-or-user-image' ) . '</p></details>';
+		}
+		echo '</section>';
+	}
+
+	/**
+	 * Render a labeled counter for native and enhanced progress.
+	 *
+	 * @param string $key Counter identifier.
+	 * @param string $label Translated label.
+	 * @param int    $count Current count.
+	 * @return void
+	 */
+	private function render_count( $key, $label, $count ) {
+		echo '<div><dt>' . esc_html( $label ) . '</dt><dd data-zmai-count="' . esc_attr( $key ) . '">' . esc_html( (string) $count ) . '</dd></div>';
+	}
+
+	/**
+	 * Labels shared by the server and the progressive driver.
+	 *
+	 * @return array<string,string>
+	 */
+	private function state_labels() {
+		return array(
+			'idle'                 => __( 'Ready to import', 'author-or-user-image' ),
+			'running'              => __( 'Import in progress', 'author-or-user-image' ),
+			'paused'               => __( 'Import paused', 'author-or-user-image' ),
+			'paused_with_failures' => __( 'Import needs attention', 'author-or-user-image' ),
+			'complete'             => __( 'Import complete', 'author-or-user-image' ),
+			'recovery_required'    => __( 'Recovery required', 'author-or-user-image' ),
+		);
 	}
 
 	/**
@@ -224,22 +330,19 @@ final class Import_Admin {
 	 * @param string     $operation Fixed action.
 	 * @param array|null $job Persisted job.
 	 * @param string     $label Translated button label.
+	 * @param string     $source Detected source for a new import.
 	 * @return void
 	 */
-	private function form( $operation, $job, $label ) {
+	private function form( $operation, $job, $label, $source = '' ) {
 		$id = $job ? $job['id'] : '';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" data-zmai-operation="' . esc_attr( $operation ) . '">';
 		echo '<input type="hidden" name="action" value="zmai_import_' . esc_attr( $operation ) . '"><input type="hidden" name="site_id" value="' . esc_attr( (string) get_current_blog_id() ) . '">';
 		echo '<input type="hidden" name="job_id" value="' . esc_attr( $id ) . '"><input type="hidden" name="revision" value="' . esc_attr( $job ? (string) $job['revision'] : '0' ) . '">';
 		wp_nonce_field( 'zmai_import_' . $operation . ( 'start' === $operation ? '' : '_' . $id ) );
 		if ( 'start' === $operation ) {
-			echo '<input type="hidden" name="run_token" value="' . esc_attr( wp_generate_uuid4() ) . '"><p><label for="zmai-import-source">' . esc_html__( 'Source plugin', 'author-or-user-image' ) . '</label> <select name="source" id="zmai-import-source">';
-			foreach ( Import_Sources::registry() as $source => $name ) {
-				echo '<option value="' . esc_attr( $source ) . '">' . esc_html( $name ) . '</option>';
-			}
-			echo '</select></p>';
+			echo '<input type="hidden" name="run_token" value="' . esc_attr( wp_generate_uuid4() ) . '"><input type="hidden" name="source" value="' . esc_attr( $source ) . '">';
 		}
-		submit_button( $label, 'pause' === $operation ? 'secondary' : 'primary' );
+		submit_button( $label, 'pause' === $operation || 'finish' === $operation ? 'secondary' : 'primary', 'zmai-' . $operation . '-' . $source, false );
 		echo '</form>';
 	}
 

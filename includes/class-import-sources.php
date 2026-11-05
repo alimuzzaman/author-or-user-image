@@ -30,17 +30,82 @@ final class Import_Sources {
 	}
 
 	/**
-	 * Allowlisted source names and verified versions, never arbitrary class names.
+	 * Allowlisted source names, never arbitrary class names.
 	 *
 	 * @return array<string,string>
 	 */
 	public static function registry() {
 		return array(
-			'simple-local-avatars'     => __( 'Simple Local Avatars 2.8.6', 'author-or-user-image' ),
-			'one-user-avatar'          => __( 'One User Avatar 2.5.6 / WP User Avatar 2.2.16 attachment IDs', 'author-or-user-image' ),
-			'wp-user-avatars'          => __( 'WP User Avatars 2.2.0', 'author-or-user-image' ),
-			'metronet-profile-picture' => __( 'User Profile Picture / Metronet 2.6.4', 'author-or-user-image' ),
+			'simple-local-avatars'     => __( 'Simple Local Avatars', 'author-or-user-image' ),
+			'one-user-avatar'          => __( 'One User Avatar / WP User Avatar', 'author-or-user-image' ),
+			'wp-user-avatars'          => __( 'WP User Avatars', 'author-or-user-image' ),
+			'metronet-profile-picture' => __( 'User Profile Picture / Metronet', 'author-or-user-image' ),
 		);
+	}
+
+	/**
+	 * Find installed adapters or saved avatar records for current-site members.
+	 * File ownership and readability are checked by the import worker.
+	 *
+	 * @return array<string,string>|WP_Error
+	 */
+	public function detected_sources() {
+		global $wpdb;
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$installed = array_keys( get_plugins() );
+		$plugins   = array(
+			'simple-local-avatars'     => array( 'simple-local-avatars' ),
+			'one-user-avatar'          => array( 'wp-user-avatar', 'one-user-avatar' ),
+			'wp-user-avatars'          => array( 'wp-user-avatars' ),
+			'metronet-profile-picture' => array( 'metronet-profile-picture', 'user-profile-picture' ),
+		);
+		$prefix    = $wpdb->get_blog_prefix();
+		$keys      = array(
+			'simple-local-avatars'     => array(),
+			'one-user-avatar'          => array( $prefix . 'user_avatar' ),
+			'wp-user-avatars'          => array( 'wp_user_avatars' ),
+			'metronet-profile-picture' => array( $prefix . 'metronet_post_id', 'metronet_post_id', $prefix . 'metronet_image_id' ),
+		);
+		if ( ! is_multisite() || is_main_site() ) {
+			$keys['one-user-avatar'][] = 'wp_user_avatar';
+		}
+		$detected = array();
+		try {
+			foreach ( self::registry() as $source => $name ) {
+				foreach ( $plugins[ $source ] as $slug ) {
+					if ( in_array( $slug . '/' . $slug . '.php', $installed, true ) || in_array( $slug . '.php', $installed, true ) ) {
+						$detected[ $source ] = $name;
+						continue 2;
+					}
+				}
+				foreach ( 'simple-local-avatars' === $source ? array( $this->simple_local_key() ) : $keys[ $source ] as $key ) {
+					if ( is_wp_error( $key ) ) {
+						return $key;
+					}
+					$found = $this->store->database_values(
+						is_multisite() ? $wpdb->prepare(
+							"SELECT 1 FROM %i m WHERE m.meta_key = %s AND m.meta_value NOT IN ('', '0', 'a:0:{}') AND EXISTS (SELECT 1 FROM %i c WHERE c.user_id = m.user_id AND c.meta_key = %s) LIMIT 1",
+							$wpdb->usermeta,
+							$key,
+							$wpdb->usermeta,
+							$prefix . 'capabilities'
+						) : $wpdb->prepare(
+							"SELECT 1 FROM %i m WHERE m.meta_key = %s AND m.meta_value NOT IN ('', '0', 'a:0:{}') AND EXISTS (SELECT 1 FROM %i u WHERE u.ID = m.user_id) LIMIT 1",
+							$wpdb->usermeta,
+							$key,
+							$wpdb->users
+						)
+					);
+					if ( $found ) {
+						$detected[ $source ] = $name;
+						break;
+					}
+				}
+			}
+		} catch ( \Throwable $error ) {
+			return $this->store->storage_error();
+		}
+		return $detected;
 	}
 
 	/**
@@ -189,6 +254,16 @@ final class Import_Sources {
 	 * @return array|WP_Error
 	 */
 	private function simple_local( $user_id ) {
+		$key = $this->simple_local_key();
+		return is_wp_error( $key ) ? $key : $this->array_source( $this->user_row( $user_id, $key ), 'blog_id', $user_id );
+	}
+
+	/**
+	 * Resolve the effective Simple Local Avatars metadata key.
+	 *
+	 * @return string|WP_Error
+	 */
+	private function simple_local_key() {
 		$options = $this->setting( 'simple_local_avatars' );
 		if ( is_multisite() ) {
 			$active = $this->setting( 'active_sitewide_plugins', true );
@@ -207,7 +282,7 @@ final class Import_Sources {
 		if ( is_multisite() && isset( $options['value']['shared'] ) && 1 !== $options['value']['shared'] ) {
 			$key .= '_' . get_current_blog_id();
 		}
-		return $this->array_source( $this->user_row( $user_id, $key ), 'blog_id', $user_id );
+		return $key;
 	}
 
 	/**

@@ -69,7 +69,7 @@ test('image over 8 MiB shows the upload-limit error and preserves avatar', async
 test('admin blocks uploads, removes avatar, then unblocks the subscriber', async ({page}) => {
   await login(page);
   const uploadedURL = await upload(page);
-  const nonce = await page.locator('input[name="_wpnonce"]').first().inputValue();
+  const nonce = await page.locator('form').filter({has:page.locator('input[name="action"][value="zmai_save_avatar"]')}).locator('input[name="_wpnonce"]').inputValue();
   const subscriberState = await page.context().storageState();
   await login(page,'admin');
   await page.goto(managePage);
@@ -128,7 +128,7 @@ test('subscriber cannot view admin controls or submit admin-only actions', async
   await page.goto(avatarPage);
   await expect(page.getByRole('heading',{name:'Site default avatar',exact:true})).toHaveCount(0);
   const removeNonce = await page.locator('form').filter({has:page.locator('input[name="action"][value="zmai_remove_avatar"]')}).locator('input[name="_wpnonce"]').inputValue();
-  const nonce = await page.locator('input[name="_wpnonce"]').first().inputValue();
+  const nonce = await page.locator('form').filter({has:page.locator('input[name="action"][value="zmai_save_avatar"]')}).locator('input[name="_wpnonce"]').inputValue();
   const protectedPage = await page.goto(managePage);
   expect(protectedPage.status()).toBe(403);
   await expect(page.locator('body')).toContainText(/not allowed|higher level of permission/);

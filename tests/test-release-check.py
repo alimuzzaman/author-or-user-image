@@ -28,7 +28,7 @@ SPEC.loader.exec_module(RELEASE_CHECK)
 class ReleaseCheckTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.scratch = Path(self.temp_dir.name)
+        self.scratch = Path(self.temp_dir.name).resolve()
         self.project = self.scratch / "plugin"
         self.project.mkdir()
         for relative in RELEASE_CHECK.PRODUCTION_FILES:

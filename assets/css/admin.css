@@ -34,3 +34,104 @@
 		flex-direction: column;
 	}
 }
+
+.zmai-migration .zmai-card h2 {
+	margin-top: 0;
+}
+
+.zmai-migration-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 12px 0;
+}
+
+.zmai-migration-actions .button {
+	max-width: 100%;
+	white-space: normal;
+}
+
+.zmai-migration details {
+	margin-top: 16px;
+}
+
+.zmai-migration summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.zmai-migration-counts {
+	margin: 8px 0;
+}
+
+.zmai-migration-counts > div {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	max-width: 34em;
+	padding: 6px 0;
+	border-bottom: 1px solid #dcdcde;
+}
+
+.zmai-migration-counts dd {
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.zmai-avatar-settings .zmai-card {
+	display: grid;
+	grid-template-columns: minmax(9em, 1fr) minmax(0, 3fr);
+	gap: 20px;
+}
+
+.zmai-avatar-settings .zmai-card h2 {
+	margin: 0;
+}
+
+.zmai-avatar-current,
+.zmai-upload-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.zmai-avatar-current > * {
+	margin: 0;
+}
+
+.zmai-avatar-current .zmai-avatar-preview {
+	width: 56px;
+}
+
+.zmai-avatar-settings .zmai-upload-form {
+	display: grid;
+	justify-items: start;
+	gap: 8px;
+}
+
+.zmai-upload-form label,
+.zmai-upload-form summary {
+	font-weight: 600;
+}
+
+.zmai-upload-form summary {
+	cursor: pointer;
+}
+
+.zmai-upload-form p {
+	margin: 0;
+}
+
+.zmai-upload-actions,
+.zmai-upload-actions input[type="file"] {
+	max-width: 100%;
+	min-width: 0;
+}
+
+@media screen and (max-width: 782px) {
+	.zmai-avatar-settings .zmai-card {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+	}
+}

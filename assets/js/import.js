@@ -8,7 +8,9 @@
 	var stopButton;
 	var message = root.querySelector('[data-zmai-message]');
 	function show(job) {
-		root.querySelector('[data-zmai-state]').textContent = job.state;
+		root.querySelector('[data-zmai-progress]').hidden = false;
+		var states = window.zmaiImportStates || {};
+		root.querySelector('[data-zmai-state]').textContent = states[job.state] || job.state;
 		Object.keys(job.counts).forEach(function (key) {
 			var target = root.querySelector('[data-zmai-count="' + key + '"]');
 			if (target) { target.textContent = String(job.counts[key]); }

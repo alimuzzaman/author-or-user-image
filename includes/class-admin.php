@@ -104,7 +104,7 @@ final class Admin {
 		$user_id = get_current_user_id();
 		$blocked = $this->store->is_blocked( $user_id );
 		?>
-		<div class="wrap zmai-wrap">
+		<div class="wrap zmai-wrap zmai-avatar-settings">
 			<h1><?php esc_html_e( 'Author or User Image', 'author-or-user-image' ); ?></h1>
 			<?php $this->render_status_notice(); ?>
 
@@ -113,27 +113,35 @@ final class Admin {
 			<?php else : ?>
 				<div class="zmai-card">
 					<h2><?php esc_html_e( 'Your avatar', 'author-or-user-image' ); ?></h2>
-					<?php $this->render_avatar_preview( $user_id, false ); ?>
-					<?php if ( $this->policy->can_upload( $user_id ) ) : ?>
-						<?php $this->render_upload_form( 'user_avatar', false ); ?>
-					<?php else : ?>
-						<p><?php esc_html_e( 'Your role is not allowed to upload a new avatar on this site. You can still remove your avatar.', 'author-or-user-image' ); ?></p>
-					<?php endif; ?>
-					<?php if ( $this->store->get_url( $user_id, $this->store->get_size(), false ) ) : ?>
-						<?php $this->render_remove_form( 'user' ); ?>
-					<?php endif; ?>
+					<div class="zmai-avatar-controls">
+						<div class="zmai-avatar-current">
+							<?php $this->render_avatar_preview( $user_id, false ); ?>
+							<?php if ( $this->store->get_url( $user_id, $this->store->get_size(), false ) ) : ?>
+								<?php $this->render_remove_form( 'user' ); ?>
+							<?php endif; ?>
+						</div>
+						<?php if ( $this->policy->can_upload( $user_id ) ) : ?>
+							<?php $this->render_upload_form( 'user_avatar', false ); ?>
+						<?php else : ?>
+							<p><?php esc_html_e( 'Your role is not allowed to upload a new avatar on this site. You can still remove your avatar.', 'author-or-user-image' ); ?></p>
+						<?php endif; ?>
+					</div>
 				</div>
 			<?php endif; ?>
 
 			<?php if ( current_user_can( 'manage_options' ) ) : ?>
 				<div class="zmai-card">
 					<h2><?php esc_html_e( 'Site default avatar', 'author-or-user-image' ); ?></h2>
-					<p><?php esc_html_e( 'This image is used when a registered user has not uploaded one.', 'author-or-user-image' ); ?></p>
-					<?php $this->render_avatar_preview( 0, true ); ?>
-					<?php $this->render_upload_form( 'default_avatar', true ); ?>
-					<?php if ( $this->store->get_url( 0, $this->store->get_size() ) ) : ?>
-						<?php $this->render_remove_form( 'default' ); ?>
-					<?php endif; ?>
+					<div class="zmai-avatar-controls">
+						<p><?php esc_html_e( 'This image is used when a registered user has not uploaded one.', 'author-or-user-image' ); ?></p>
+						<div class="zmai-avatar-current">
+							<?php $this->render_avatar_preview( 0, true ); ?>
+							<?php if ( $this->store->get_url( 0, $this->store->get_size() ) ) : ?>
+								<?php $this->render_remove_form( 'default' ); ?>
+							<?php endif; ?>
+						</div>
+						<?php $this->render_upload_form( 'default_avatar', true ); ?>
+					</div>
 				</div>
 			<?php endif; ?>
 		</div>
@@ -172,14 +180,20 @@ final class Admin {
 	 */
 	private function render_upload_form( $field, $is_default ) {
 		?>
-		<form class="zmai-form" method="post" action="<?php echo esc_url( add_query_arg( 'action', 'zmai_save_avatar', admin_url( 'admin-post.php' ) ) ); ?>" enctype="multipart/form-data">
+		<form class="zmai-form zmai-upload-form" method="post" action="<?php echo esc_url( add_query_arg( 'action', 'zmai_save_avatar', admin_url( 'admin-post.php' ) ) ); ?>" enctype="multipart/form-data">
 			<input type="hidden" name="action" value="zmai_save_avatar">
 			<input type="hidden" name="avatar_type" value="<?php echo $is_default ? 'default' : 'user'; ?>">
 			<?php wp_nonce_field( 'zmai_save_avatar' ); ?>
 			<label for="<?php echo esc_attr( $field ); ?>"><?php esc_html_e( 'Choose an image', 'author-or-user-image' ); ?></label>
-			<p class="description"><?php esc_html_e( 'Use a JPEG, PNG or static WebP up to 4096 by 4096 pixels and the smaller of this site’s upload limit or 8 MiB. New avatars use a centered square without upscaling. Sanitized uncropped originals remain in the Media Library. New files remove photo metadata while retaining ICC color profiles. Previously uploaded originals keep metadata until re-uploaded. JPEG processing requires server EXIF support.', 'author-or-user-image' ); ?></p>
-			<input id="<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $field ); ?>" type="file" accept="image/jpeg,image/png,image/webp" required>
-			<?php submit_button( __( 'Upload image', 'author-or-user-image' ), 'primary', 'submit', false ); ?>
+			<div class="zmai-upload-actions">
+				<input id="<?php echo esc_attr( $field ); ?>" name="<?php echo esc_attr( $field ); ?>" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="<?php echo esc_attr( $field . '-limits' ); ?>" required>
+				<?php submit_button( __( 'Upload image', 'author-or-user-image' ), 'primary', $field . '_submit', false ); ?>
+			</div>
+			<p id="<?php echo esc_attr( $field . '-limits' ); ?>" class="description"><?php esc_html_e( 'Choose a JPEG, PNG or static WebP up to 4096 × 4096 pixels. The limit is 8 MiB or your site’s upload limit, whichever is lower.', 'author-or-user-image' ); ?></p>
+			<details>
+				<summary><?php esc_html_e( 'How images are processed', 'author-or-user-image' ); ?></summary>
+				<p class="description"><?php esc_html_e( 'New avatars use a centered square without upscaling. Sanitized uncropped originals remain in the Media Library. New files remove photo metadata while retaining ICC color profiles. Previously uploaded originals keep metadata until re-uploaded. JPEG processing requires server EXIF support.', 'author-or-user-image' ); ?></p>
+			</details>
 		</form>
 		<?php
 	}
@@ -196,7 +210,7 @@ final class Admin {
 			<input type="hidden" name="action" value="zmai_remove_avatar">
 			<input type="hidden" name="avatar_type" value="<?php echo esc_attr( $type ); ?>">
 			<?php wp_nonce_field( 'zmai_remove_avatar' ); ?>
-			<?php submit_button( __( 'Remove image', 'author-or-user-image' ), 'secondary', 'submit', false ); ?>
+			<?php submit_button( __( 'Remove image', 'author-or-user-image' ), 'secondary', 'zmai_remove_' . $type, false ); ?>
 		</form>
 		<?php
 	}
@@ -324,7 +338,7 @@ final class Admin {
 		}
 
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'images'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only tab selection; state changes require a separate nonce-verified POST.
-		if ( ! in_array( $tab, array( 'images', 'blocked', 'settings' ), true ) ) {
+		if ( ! in_array( $tab, array( 'images', 'blocked', 'settings', 'migration' ), true ) ) {
 			$tab = 'images';
 		}
 		?>
@@ -335,10 +349,13 @@ final class Admin {
 				<?php $this->render_tab_link( 'images', __( 'User images', 'author-or-user-image' ), $tab ); ?>
 				<?php $this->render_tab_link( 'blocked', __( 'Blocked users', 'author-or-user-image' ), $tab ); ?>
 				<?php $this->render_tab_link( 'settings', __( 'Settings', 'author-or-user-image' ), $tab ); ?>
+				<?php $this->render_tab_link( 'migration', __( 'Avatar Migration', 'author-or-user-image' ), $tab ); ?>
 			</nav>
 			<?php
 			if ( 'settings' === $tab ) {
 				$this->render_settings();
+			} elseif ( 'migration' === $tab ) {
+				( new Import_Admin( new Migration( $this->store ) ) )->render_page( true );
 			} else {
 				$this->render_user_table( $tab );
 			}

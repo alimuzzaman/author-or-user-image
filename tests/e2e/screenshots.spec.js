@@ -47,8 +47,10 @@ test('@screenshots clean WordPress.org gallery',async({page})=>{
   await page.locator('.zmai-front-end').scrollIntoViewIfNeeded();
   await capture(page,6);
   await login(page,'admin');
-  await page.goto('/wp-admin/users.php?page=author-or-user-image-import');
-  await expect(page.getByRole('heading',{name:'Import avatars',exact:true})).toBeVisible();
-  await expect(page.getByLabel('Source plugin')).toBeVisible();
+  await page.goto(`${managePage}&tab=migration`);
+  await expect(page.getByRole('heading',{name:'Avatar Management',exact:true})).toBeVisible();
+  await expect(page.locator('.nav-tab-active')).toHaveText('Avatar Migration');
+  await expect(page.getByRole('button',{name:'Import from WP User Avatars',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Source plugin')).toHaveCount(0);
   await capture(page,7);
 });

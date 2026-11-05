@@ -36,7 +36,7 @@ The plugin does not send image or user data to an external service.
 3. Open **Users > Author or User Image** to upload your avatar.
 4. Administrators can set the site default on that page and manage user images under **Users > Avatar Management**.
 5. To let signed-in visitors upload from a page, add the **Avatar upload** block, or use the `[author_or_user_image_upload]` shortcode on a Classic Editor page.
-6. Administrators can import avatars from an older avatar plugin under **Users > Import avatars**.
+6. Administrators can import avatars from an older avatar plugin under **Users > Avatar Management > Avatar Migration**.
 
 == Frequently Asked Questions ==
 
@@ -129,7 +129,7 @@ Trusted PHP code can opt out for an individual operation with the `zmai_strip_im
 
 = How do I import avatars from another plugin? =
 
-Open **Users > Import avatars**, choose the source plugin, and start the import. Only an administrator can run it. Competitor imports start only from this screen. The automatic migration of this plugin's older data remains separate. The import runs in pages and reports counts, errors, and completion. Stop pauses the import, and Resume continues it. Closing the page stops further batches, so reopen the page and choose Resume.
+Open **Users > Avatar Management > Avatar Migration** and use the import action for the detected source plugin. The tab is always available. A separate **Users > Avatar Migration** menu appears when a supported plugin or saved avatar data is detected, or an unfinished import needs attention. No source selector is needed. Only an administrator can run an import. Competitor imports start only from this screen. The automatic migration of this plugin's older data remains separate. The import runs in pages and reports counts, errors, and completion. Stop pauses the import, and Resume continues it. Closing the page stops further batches, so reopen the page and choose Continue or Resume.
 
 A user who already has an imported avatar is skipped by later runs, so the first source imported for that user wins. A user who removes an avatar stays without one, and removal blocks any later re-import for that user.
 
@@ -164,7 +164,7 @@ The importer does not migrate source settings or ratings, sync avatars across a 
 4. Custom avatars appear in front-end author cards and WordPress comments.
 5. Administrators can set a site default avatar for registered users without an uploaded image.
 6. Upload, replace, or remove your avatar on a page with the Avatar upload block or shortcode.
-7. Import avatars from one source plugin at a time, and see progress and results on the Import avatars page.
+7. Import avatars from one detected source plugin at a time, and see progress and results on the Avatar Migration tab.
 
 == Upgrade Notice ==
 
@@ -190,7 +190,7 @@ Major security and standards rewrite. Existing settings and legacy JPG avatars a
 * Restricted importer adoption to subject-owned or legitimately administrator-assigned attachments. Unprovable URL-only references are skipped as not_owned.
 * Replaced arbitrary administrator error text with fixed messages.
 * Added center-square renditions for new uploads and competitor imports. Originals keep their full, uncropped pixels. New stored files strip descriptive metadata by default while retaining ICC color data. Earlier uploads retain metadata until re-uploaded.
-* Added an Import avatars page under Users. It imports one source plugin at a time, in pages that can resume, from Simple Local Avatars, One User Avatar and WP User Avatar attachment IDs, WP User Avatars, and User Profile Picture / Metronet.
+* Added an Avatar Migration tab in Avatar Management, with a separate menu when a source or unfinished import is available. Direct actions import one detected source plugin at a time, in pages that can resume, from Simple Local Avatars, One User Avatar and WP User Avatar attachment IDs, WP User Avatars, and User Profile Picture / Metronet.
 * Import leaves source plugin data unchanged and never deactivates or removes source plugins.
 
 = 3.0.1 =

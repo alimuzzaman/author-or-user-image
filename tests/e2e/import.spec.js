@@ -20,7 +20,7 @@ test.describe('competitor importer', () => {
     expect(data.sourceUserIds.length).toBeGreaterThan(40);
     await login(page, 'admin');
     await page.goto(importer);
-    await page.getByLabel('Source plugin').selectOption(data.source);
+    const sourceForm = page.locator('form[data-zmai-operation="start"]').filter({has: page.locator('input[name="source"][value="' + data.source + '"]')});
     // Freeze after one batch by navigating away once persisted progress changes.
     let batches = 0;
     await page.route('**/wp-admin/admin-post.php', async route => {
@@ -31,22 +31,21 @@ test.describe('competitor importer', () => {
       }
       await route.continue();
     });
-    await page.getByRole('button', {name:'Import avatars', exact:true}).click();
+    await sourceForm.getByRole('button', {name:/^Import from /}).click();
     await expect(page.locator('[data-zmai-count="inspected"]')).not.toHaveText('0');
     await page.goto('/wp-admin/');
     await page.unroute('**/wp-admin/admin-post.php');
     await page.goto(importer);
     await expect(page.locator('[data-zmai-count="inspected"]')).not.toHaveText('0');
     await page.getByRole('button', {name:/Continue|Resume/, exact:true}).click();
-    await expect(page.locator('[data-zmai-state]')).toHaveText('complete', {timeout:90000});
+    await expect(page.locator('[data-zmai-state]')).toHaveText('Import complete', {timeout:90000});
     await expect(page.locator('[data-zmai-count="failed"]')).toHaveText('0');
     await expect(page.locator('[data-zmai-count="skipped"]')).not.toHaveText('0');
     await expect(page.locator('[data-zmai-skips]')).toContainText('missing_file');
     // Missing file restoration is a local fixture action; source metadata stays intact.
     fs.copyFileSync(data.repairPath, data.missingPath);
-    await page.getByLabel('Source plugin').selectOption(data.source);
-    await page.getByRole('button', {name:'Import avatars', exact:true}).click();
-    await expect(page.locator('[data-zmai-state]')).toHaveText('complete', {timeout:90000});
+    await sourceForm.getByRole('button', {name:/^Import from /}).click();
+    await expect(page.locator('[data-zmai-state]')).toHaveText('Import complete', {timeout:90000});
     await expect(page.locator('[data-zmai-count="failed"]')).toHaveText('0');
     await page.goto(data.frontUrl);
     const image = page.locator(data.avatarSelector).first();
@@ -76,11 +75,11 @@ test.describe('competitor importer', () => {
     await page.locator('#wp-submit').click();
     await page.goto(importer);
     await expect(page.locator('form[action$="admin-post.php"]')).not.toHaveCount(0);
-    const button = page.getByRole('button', {name:/Continue|Resume|Retry repaired sources|Import avatars/, exact:true}).first();
+    const button = page.getByRole('button', {name:/Continue|Resume|Retry repaired sources|Import from .+/, exact:true}).first();
     await expect(button).toBeVisible();
     // Fresh fixture or a persisted running job are both explicit operator actions.
     await button.click();
-    await expect(page).toHaveURL(/author-or-user-image-import/);
+    await expect(page).toHaveURL(/author-or-user-image-manage.*tab=migration/);
     await expect(page.locator('[aria-live="polite"]')).toBeVisible();
     await context.close();
   });

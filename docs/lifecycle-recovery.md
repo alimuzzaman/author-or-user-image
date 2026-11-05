@@ -127,7 +127,7 @@ temporary lock and persistence failures. Source changes during copying and image
 editor failures are retryable. Older skip records for these reasons remain
 readable. A skip-only sweep completes. The job
 stores at most 100 skipped user IDs and fixed reason codes, displayed on
-Users > Import avatars. Counts include skips beyond that cap. Restore or repair
+Users > Avatar Management > Avatar Migration. Counts include skips beyond that cap. Restore or repair
 source files locally, then start a new import; successful existing mappings
 remain untouched. No source paths or URLs are retained in the job.
 

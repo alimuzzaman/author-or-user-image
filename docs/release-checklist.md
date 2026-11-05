@@ -19,7 +19,7 @@ python3 "$PLUGIN_DIR/tools/check-release.py" \
   --zip-output "$PACKAGE_ZIP"
 ```
 
-The command prints the SHA-256 digest and the 23 production members. Confirm
+The command prints the SHA-256 digest and the 24 production members. Confirm
 that the archive contains those members only and retains no development files.
 The package check and PHP syntax checks run before the existing WordPress.org
 deploy action receives its SVN credentials.
