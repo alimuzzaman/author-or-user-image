@@ -4,7 +4,7 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'local' !== wp_get_environment_type() 
 	throw new RuntimeException( 'Disposable local WordPress required.' );
 }
 
-$sources_file = dirname( __DIR__ ) . '/includes/class-import-sources.php';
+$sources_file = defined( 'ZMAI_PATH' ) ? ZMAI_PATH . 'includes/class-import-sources.php' : dirname( __DIR__ ) . '/includes/class-import-sources.php';
 if ( is_file( $sources_file ) ) {
 	require_once $sources_file;
 }

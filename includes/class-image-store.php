@@ -780,7 +780,7 @@ final class Image_Store {
 	}
 
 	/**
-	 * Marked media must serve its checked square at every requested display size.
+	 * Prefer square metadata and retain historical attachment-size fallbacks.
 	 *
 	 * @param int $id Attachment ID.
 	 * @param int $size Requested display size for historical media only.

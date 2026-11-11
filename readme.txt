@@ -115,7 +115,7 @@ New uploads need the local file until the square avatar is generated. Offload se
 
 Existing avatars and legacy JPG files are not rewritten. They keep their current display until the user replaces them. Changing the avatar size affects newly processed uploads and imports only.
 
-An uncropped original is never served as a replacement for a missing square file.
+When square-rendition metadata is missing or invalid, avatar display uses WordPress's normal attachment-size fallback, which may serve an uncropped image.
 
 Cropping is not redaction. The original keeps its full image.
 
