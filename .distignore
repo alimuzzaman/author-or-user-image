@@ -3,6 +3,7 @@
 /.github
 /.gitignore
 /.distignore
+/README.md
 /composer.json
 /composer.lock
 /node_modules

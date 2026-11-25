@@ -577,6 +577,61 @@ final class Admin {
 			<?php submit_button( __( 'Save settings', 'author-or-user-image' ) ); ?>
 		</form>
 		<?php
+		$this->render_lock_diagnostics();
+	}
+
+	/**
+	 * Render read-only lifecycle lock status without exposing lock tokens or unsafe clear actions.
+	 *
+	 * @return void
+	 */
+	private function render_lock_diagnostics() {
+		$locks          = $this->store->get_lock()->inspect_locks();
+		$release_failed = (bool) get_option( Migration::RELEASE_FAILED_OPTION );
+		$scope_labels   = array(
+			'migration' => __( 'Migration coordinator', 'author-or-user-image' ),
+			'blocks'    => __( 'Block list', 'author-or-user-image' ),
+			'default'   => __( 'Default avatar', 'author-or-user-image' ),
+			'user'      => __( 'User avatar', 'author-or-user-image' ),
+			'unknown'   => __( 'Unknown', 'author-or-user-image' ),
+		);
+		?>
+		<div class="zmai-card">
+			<h2><?php esc_html_e( 'Lifecycle lock status', 'author-or-user-image' ); ?></h2>
+			<?php if ( is_wp_error( $locks ) ) : ?>
+				<p class="description"><?php esc_html_e( 'Could not read lifecycle lock status from the database.', 'author-or-user-image' ); ?></p>
+			<?php elseif ( ! $locks && ! $release_failed ) : ?>
+				<p class="description"><?php esc_html_e( 'No active or retained avatar locks were found on this site.', 'author-or-user-image' ); ?></p>
+			<?php else : ?>
+				<?php if ( $release_failed ) : ?>
+					<div class="notice notice-warning inline">
+						<p><?php esc_html_e( 'A legacy migration lock release previously failed. Verify no migration process is active and follow the lifecycle recovery guide before retrying.', 'author-or-user-image' ); ?></p>
+					</div>
+				<?php endif; ?>
+				<?php if ( $locks ) : ?>
+					<p class="description"><?php esc_html_e( 'Active locks belong to running requests. Retained locks remain after an interrupted operation; confirm no worker is running and reconcile using the lifecycle recovery guide before removing any row.', 'author-or-user-image' ); ?></p>
+					<table class="widefat striped">
+						<thead>
+							<tr>
+								<th scope="col"><?php esc_html_e( 'Lock name', 'author-or-user-image' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Scope', 'author-or-user-image' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Owner ID', 'author-or-user-image' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $locks as $lock ) : ?>
+								<tr>
+									<td><code><?php echo esc_html( $lock['name'] ); ?></code></td>
+									<td><?php echo esc_html( $scope_labels[ $lock['scope'] ] ?? $scope_labels['unknown'] ); ?></td>
+									<td><?php echo esc_html( $lock['owner_id'] > 0 ? (string) $lock['owner_id'] : '—' ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				<?php endif; ?>
+			<?php endif; ?>
+		</div>
+		<?php
 	}
 
 	/**

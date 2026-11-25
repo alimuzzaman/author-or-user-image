@@ -58,6 +58,7 @@ EXPECTED_DISTIGNORE: frozenset[str] = frozenset(
         "/.github",
         "/.gitignore",
         "/.distignore",
+        "/README.md",
         "/composer.json",
         "/composer.lock",
         "/node_modules",
@@ -73,7 +74,7 @@ EXCLUDED_DIRECTORIES: frozenset[str] = frozenset(
     {".git", ".github", ".wordpress-org", "node_modules", "vendor", "tests", "tools", "docs"}
 )
 EXCLUDED_FILES: frozenset[str] = frozenset(
-    {".gitignore", ".distignore", "composer.json", "composer.lock", "phpcs.xml.dist"}
+    {".gitignore", ".distignore", "README.md", "composer.json", "composer.lock", "phpcs.xml.dist"}
 )
 VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 PLUGIN_NAME = "Author or User Image"

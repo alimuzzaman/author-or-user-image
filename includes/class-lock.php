@@ -159,4 +159,54 @@ final class Lock {
 		}
 		return $result;
 	}
+
+	/**
+	 * Inspect active or retained lifecycle locks directly from the options table.
+	 *
+	 * @return array<int,array{name:string,scope:string,owner_id:int,token:string,table:string}>|WP_Error
+	 */
+	public function inspect_locks() {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Lock diagnostics must inspect authoritative rows rather than option caches.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT option_name, option_value FROM %i WHERE option_name LIKE %s ORDER BY option_name ASC',
+				$wpdb->options,
+				$wpdb->esc_like( 'zmai_avatar_lock_' ) . '%'
+			),
+			ARRAY_A
+		);
+		if ( $wpdb->last_error || ! is_array( $rows ) ) {
+			return self::storage_error();
+		}
+
+		$locks = array();
+		foreach ( $rows as $row ) {
+			$name     = isset( $row['option_name'] ) ? (string) $row['option_name'] : '';
+			$token    = isset( $row['option_value'] ) ? (string) $row['option_value'] : '';
+			$scope    = 'unknown';
+			$owner_id = 0;
+
+			if ( 'zmai_avatar_lock_migration' === $name ) {
+				$scope = 'migration';
+			} elseif ( 'zmai_avatar_lock_blocks' === $name ) {
+				$scope = 'blocks';
+			} elseif ( 'zmai_avatar_lock_default' === $name ) {
+				$scope = 'default';
+			} elseif ( preg_match( '/^zmai_avatar_lock_user_([1-9][0-9]*)$/', $name, $matches ) ) {
+				$scope    = 'user';
+				$owner_id = (int) $matches[1];
+			}
+
+			$locks[] = array(
+				'name'     => $name,
+				'scope'    => $scope,
+				'owner_id' => $owner_id,
+				'token'    => $token,
+				'table'    => (string) $wpdb->options,
+			);
+		}
+
+		return $locks;
+	}
 }

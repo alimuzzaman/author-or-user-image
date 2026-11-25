@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - latest
+      - "feature/**"
+  pull_request:
+    branches:
+      - master
+      - latest
+
+permissions:
+  contents: read
+
+jobs:
+  php-lint:
+    name: PHP Syntax (${{ matrix.php-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+      - name: Lint PHP files
+        run: |
+          find author_image.php index.php uninstall.php includes blocks tests -type f -name '*.php' -print0 |
+            while IFS= read -r -d '' file; do
+              php -l "$file" || exit 1
+            done
+
+  package-and-js:
+    name: Package Gate & JS Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run release package unit tests
+        run: python3 tests/test-release-check.py
+      - name: Validate production package manifest
+        run: |
+          VERSION=$(python3 -c "import pathlib, re; src = pathlib.Path('author_image.php').read_text(encoding='utf-8'); print(re.search(r\"define\\s*\\(\\s*['\\\"]ZMAI_VERSION['\\\"]\\s*,\\s*['\\\"]([^'\\\"]+)['\\\"]\", src).group(1))")
+          python3 tools/check-release.py --tag "$VERSION" --zip-output "$RUNNER_TEMP/author-or-user-image.zip"
+      - name: Check JavaScript syntax and import controls
+        run: |
+          for file in assets/js/*.js; do
+            node --check "$file" || exit 1
+          done
+          node tests/import-controls.js
+
+  wpcs:
+    name: WordPress Coding Standards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: composer:v2
+          coverage: none
+      - name: Install WPCS outside checkout
+        run: |
+          mkdir -p "$RUNNER_TEMP/wpcs"
+          cd "$RUNNER_TEMP/wpcs"
+          composer init --no-interaction --name="zmai/wpcs-runner" --require="php:>=7.4"
+          composer config --no-plugins allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
+          composer require --no-interaction --dev "squizlabs/php_codesniffer:^3.7" "wp-coding-standards/wpcs:^3.0"
+      - name: Run PHPCS
+        run: "$RUNNER_TEMP/wpcs/vendor/bin/phpcs" --standard=WordPress author_image.php index.php uninstall.php includes/
