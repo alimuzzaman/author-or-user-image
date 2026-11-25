@@ -238,7 +238,7 @@ final class User_Cleanup {
 		foreach ( $this->deleting_users as $key => $lock ) {
 			$released = $this->store->get_lock()->release_lock( $lock );
 			unset( $this->deleting_users[ $key ] );
-			if ( is_wp_error( $released ) ) {
+			if ( is_wp_error( $released ) && function_exists( 'error_log' ) ) {
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Shutdown cannot return an error to core; log a fixed diagnostic without tokens or user data.
 				error_log( 'Author or User Image: deletion fence release failed; administrator recovery required.' );
 			}

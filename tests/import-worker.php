@@ -49,6 +49,8 @@ if ( 'hold' === $mode ) {
 }
 if ( 'legacy' === $mode ) {
 	$result = $migration->with_migration_lock( static function () { return true; } );
+} elseif ( 'finish' === $mode ) {
+	$result = $migration->finish_import( $state['job']['id'], $state['job']['revision'] );
 } else {
 	$result = $migration->run_import_batch( $state['job']['id'], $state['job']['revision'] );
 }

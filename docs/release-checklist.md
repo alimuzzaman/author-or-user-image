@@ -1,8 +1,8 @@
 # Release checklist
 
-The release is `3.1.0`. The tag, PHP plugin header, `ZMAI_VERSION`, and readme
+The release is `3.2.0`. The tag, PHP plugin header, `ZMAI_VERSION`, and readme
 Stable tag must all match. The minimums remain WordPress 6.6 and PHP 7.4. The
-readme declares WordPress 7.1 as its tested series; runtime fixtures use 7.1.3.
+readme declares WordPress 7.1 as its tested series; runtime fixtures use 7.1.4.
 
 ## Build and inspect the package
 
@@ -13,13 +13,13 @@ mismatches, missing production files, unexpected distributable paths, and any
 
 ```sh
 PLUGIN_DIR=/absolute/path/to/author-or-user-image
-PACKAGE_ZIP=/absolute/path/outside/worktree/author-or-user-image-3.1.0.zip
+PACKAGE_ZIP=/absolute/path/outside/worktree/author-or-user-image-3.2.0.zip
 python3 "$PLUGIN_DIR/tools/check-release.py" \
-  --tag 3.1.0 \
+  --tag 3.2.0 \
   --zip-output "$PACKAGE_ZIP"
 ```
 
-The command prints the SHA-256 digest and the 24 production members. Confirm
+The command prints the SHA-256 digest and the 27 production members. Confirm
 that the archive contains those members only and retains no development files.
 The package check and PHP syntax checks run before the existing WordPress.org
 deploy action receives its SVN credentials.
@@ -81,7 +81,7 @@ coverage.
 
 Use a fresh disposable WordPress installation for each PHP/WordPress pair below.
 Repeat the package install and runtime checks with PHP 7.4, 8.0, 8.1, 8.2, 8.3,
-8.4, and 8.5 against WordPress 6.6 and 7.1.3. Keep each PHP executable and site
+8.4, and 8.5 against WordPress 6.6 and 7.1.4. Keep each PHP executable and site
 root explicit:
 
 ```sh
@@ -89,7 +89,7 @@ PHP_BIN=/absolute/path/to/php-7.4
 WP_CLI_PHAR=/absolute/path/to/wp-cli.phar
 WP_ROOT=/absolute/path/to/disposable/wordpress-6.6-php74
 PLUGIN_DIR=/absolute/path/to/author-or-user-image
-PACKAGE_ZIP=/absolute/path/outside/worktree/author-or-user-image-3.1.0.zip
+PACKAGE_ZIP=/absolute/path/outside/worktree/author-or-user-image-3.2.0.zip
 
 "$PHP_BIN" "$WP_CLI_PHAR" core version --path="$WP_ROOT"
 mkdir -p "$WP_ROOT/wp-content/plugins/author-or-user-image"
@@ -128,11 +128,14 @@ Repeat these checks across the complete PHP and WordPress matrix. Record the PHP
 version, WordPress version, package SHA-256, command, and result for every pair.
 The release workflow does not run these WordPress runtime suites.
 
-## Review the 3.1 behavior
+## Review the 3.2 behavior
 
 Run the full SQLite and MySQL single-site/multisite matrices, production WPCS,
-PHP syntax checks on 7.4 through 8.5 and JavaScript syntax checks. Run every
-Playwright suite on the marked wp713 fixture, including the front-end and
+PHP syntax, static compatibility (`tests/php-compatibility.php` + `--self-test`),
+host `disable_functions` checks (`tests/check-disabled-functions.py`), the full
+PHP `7.4` through `8.5` runtime compatibility matrix (`tests/check-php-matrix.py`),
+and JavaScript syntax checks. Run every
+Playwright suite on the marked wp714 fixture, including the front-end and
 importer specs. Generate the screenshot gallery through that harness and inspect
 its images before copying final PNGs to `.wordpress-org/`.
 
@@ -145,8 +148,8 @@ caches and allow authenticated POSTs to `wp-admin/admin-post.php`.
 ## Publish
 
 A human reviews the package digest and recorded results, then separately
-authorizes publishing. Pushing the bare `3.1.0` tag starts the existing deploy
+authorizes publishing. Pushing the bare `3.2.0` tag starts the existing deploy
 workflow. The checker does not create or push tags, and it does not publish by
 itself.
 
-The readme `Tested up to` field uses `7.1` as required by Plugin Check; runtime fixtures remain WordPress 7.1.3.
+The readme `Tested up to` field uses `7.1` as required by Plugin Check; runtime fixtures remain WordPress 7.1.4.

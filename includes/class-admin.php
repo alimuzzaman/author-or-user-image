@@ -279,8 +279,9 @@ final class Admin {
 	 * @return void
 	 */
 	private function reject_oversized_upload() {
-		$limit  = wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) );
-		$length = isset( $_SERVER['CONTENT_LENGTH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['CONTENT_LENGTH'] ) ) : '';
+		$post_max = function_exists( 'ini_get' ) ? (string) ini_get( 'post_max_size' ) : '';
+		$limit    = '' !== $post_max ? wp_convert_hr_to_bytes( $post_max ) : 0;
+		$length   = isset( $_SERVER['CONTENT_LENGTH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['CONTENT_LENGTH'] ) ) : '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Only detect PHP's discarded body; no submitted data is processed and no state is changed.
 		if ( ! current_user_can( 'read' ) || ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] || $_POST || $_FILES || $limit <= 0 || ! ctype_digit( $length ) || (float) $length <= $limit ) {
 			return;
@@ -524,8 +525,12 @@ final class Admin {
 			$this->redirect_manage( 'nothing-selected', $return_tab );
 		}
 
+		$blog_id = get_current_blog_id();
 		foreach ( $user_ids as $user_id ) {
-			if ( ! get_userdata( $user_id ) ) {
+			if ( ! get_userdata( $user_id ) || ( is_multisite() && ! is_user_member_of_blog( $user_id, $blog_id ) ) ) {
+				continue;
+			}
+			if ( ! current_user_can( 'edit_user', $user_id ) ) {
 				continue;
 			}
 			if ( 'delete' === $action ) {
@@ -576,6 +581,67 @@ final class Admin {
 			</table>
 			<?php submit_button( __( 'Save settings', 'author-or-user-image' ) ); ?>
 		</form>
+		<?php
+		$this->render_lock_diagnostics();
+	}
+
+	/**
+	 * Render read-only lifecycle lock status without exposing lock tokens or unsafe clear actions.
+	 *
+	 * @return void
+	 */
+	private function render_lock_diagnostics() {
+		$locks          = $this->store->get_lock()->inspect_locks();
+		$release_failed = false;
+		$status_error   = is_wp_error( $locks );
+		try {
+			$release_failed = (bool) $this->store->read_value( 0, '', Migration::RELEASE_FAILED_OPTION );
+		} catch ( \Throwable $error ) {
+			$status_error = true;
+		}
+		$scope_labels = array(
+			'migration' => __( 'Migration coordinator', 'author-or-user-image' ),
+			'blocks'    => __( 'Block list', 'author-or-user-image' ),
+			'default'   => __( 'Default avatar', 'author-or-user-image' ),
+			'user'      => __( 'User avatar', 'author-or-user-image' ),
+			'unknown'   => __( 'Unknown', 'author-or-user-image' ),
+		);
+		?>
+		<div class="zmai-card">
+			<h2><?php esc_html_e( 'Lifecycle lock status', 'author-or-user-image' ); ?></h2>
+			<?php if ( $status_error ) : ?>
+				<p class="description"><?php esc_html_e( 'Could not read lifecycle lock status from the database.', 'author-or-user-image' ); ?></p>
+			<?php elseif ( ! $locks && ! $release_failed ) : ?>
+				<p class="description"><?php esc_html_e( 'No active or retained avatar locks were found on this site.', 'author-or-user-image' ); ?></p>
+			<?php else : ?>
+				<?php if ( $release_failed ) : ?>
+					<div class="notice notice-warning inline">
+						<p><?php esc_html_e( 'A legacy migration lock release previously failed. Verify no migration process is active and follow the lifecycle recovery guide before retrying.', 'author-or-user-image' ); ?></p>
+					</div>
+				<?php endif; ?>
+				<?php if ( $locks ) : ?>
+					<p class="description"><?php esc_html_e( 'Active locks belong to running requests. Retained locks remain after an interrupted operation; confirm no worker is running and reconcile using the lifecycle recovery guide before removing any row.', 'author-or-user-image' ); ?></p>
+					<table class="widefat striped">
+						<thead>
+							<tr>
+								<th scope="col"><?php esc_html_e( 'Lock name', 'author-or-user-image' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Scope', 'author-or-user-image' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Owner ID', 'author-or-user-image' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $locks as $lock ) : ?>
+								<tr>
+									<td><code><?php echo esc_html( $lock['name'] ); ?></code></td>
+									<td><?php echo esc_html( $scope_labels[ $lock['scope'] ] ?? $scope_labels['unknown'] ); ?></td>
+									<td><?php echo esc_html( $lock['owner_id'] > 0 ? (string) $lock['owner_id'] : '—' ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				<?php endif; ?>
+			<?php endif; ?>
+		</div>
 		<?php
 	}
 
@@ -648,17 +714,7 @@ final class Admin {
 		if ( 'operation-error' === $status ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'The requested changes did not all complete. Avatar data may be busy or need administrator recovery. Please retry.', 'author-or-user-image' ) . '</p></div>';
 		} elseif ( in_array( $status, array( 'upload-error', 'remove-error' ), true ) ) {
-			$errors  = array(
-				'zmai_invalid_image'      => __( 'Choose a JPEG, PNG, or static WebP image.', 'author-or-user-image' ),
-				'zmai_upload_size'        => __( 'The image exceeds this site’s upload limit. Choose a smaller image.', 'author-or-user-image' ),
-				'zmai_rate_limited'       => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
-				'zmai_blocked'            => __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ),
-				'zmai_metadata_failed'    => __( 'The image metadata could not be removed safely. Choose another image.', 'author-or-user-image' ),
-				'zmai_metadata_cmyk'      => __( 'This server cannot safely normalize this CMYK JPEG. Convert it to RGB and try again.', 'author-or-user-image' ),
-				'zmai_invalid_dimensions' => __( 'Choose an image no larger than 4096 by 4096 pixels.', 'author-or-user-image' ),
-			);
-			$message = $errors[ $error ] ?? __( 'The image change could not be completed. Please try again or contact an administrator.', 'author-or-user-image' );
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( self::upload_error_message( $error ) ) . '</p></div>';
 		} elseif ( isset( $map[ $status ] ) ) {
 			$class = 'nothing-selected' === $status ? 'notice-warning' : 'notice-success';
 			echo '<div class="notice ' . esc_attr( $class ) . ' is-dismissible"><p>' . esc_html( $map[ $status ] ) . '</p></div>';
@@ -716,5 +772,34 @@ final class Admin {
 			)
 		);
 		exit;
+	}
+
+	/**
+	 * Map a typed avatar operation error code to a fixed translated message.
+	 *
+	 * @param string $code Typed error code.
+	 * @return string
+	 */
+	public static function upload_error_message( $code ) {
+		$errors = array(
+			'zmai_invalid_image'           => __( 'Choose a JPEG, PNG, or static WebP image.', 'author-or-user-image' ),
+			'zmai_invalid_image_container' => __( 'Choose a JPEG, PNG, or static WebP image.', 'author-or-user-image' ),
+			'zmai_animated_image'          => __( 'Animated images are not supported. Choose a static JPEG, PNG, or WebP image.', 'author-or-user-image' ),
+			'zmai_upload_size'             => __( 'The image exceeds this site’s upload limit. Choose a smaller image.', 'author-or-user-image' ),
+			'zmai_rate_limited'            => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
+			'zmai_blocked'                 => __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ),
+			'zmai_forbidden'               => __( 'You are not allowed to do that.', 'author-or-user-image' ),
+			'zmai_metadata_failed'         => __( 'The image metadata could not be removed safely. Choose another image.', 'author-or-user-image' ),
+			'zmai_metadata_cmyk'           => __( 'This server cannot safely normalize this CMYK JPEG. Convert it to RGB and try again.', 'author-or-user-image' ),
+			'zmai_invalid_dimensions'      => __( 'Choose an image no larger than 4096 by 4096 pixels.', 'author-or-user-image' ),
+			'zmai_jpeg_exif_unavailable'   => __( 'JPEG processing requires server EXIF support.', 'author-or-user-image' ),
+			'zmai_upload_missing'          => __( 'Choose an image file to upload.', 'author-or-user-image' ),
+			'zmai_upload_provenance'       => __( 'Choose a newly uploaded image.', 'author-or-user-image' ),
+			'zmai_invalid_policy'          => __( 'Choose a valid upload policy and known site roles.', 'author-or-user-image' ),
+			'zmai_busy'                    => __( 'Avatar data is busy or unavailable. Please retry.', 'author-or-user-image' ),
+			'zmai_invalid_user'            => __( 'The selected user account does not exist.', 'author-or-user-image' ),
+			'zmai_user_not_found'          => __( 'The requested user was not found.', 'author-or-user-image' ),
+		);
+		return $errors[ $code ] ?? __( 'The image change could not be completed. Please try again or contact an administrator.', 'author-or-user-image' );
 	}
 }

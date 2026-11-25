@@ -19,3 +19,7 @@
 .zmai-front-end :is(a, input, button):focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
 .zmai-front-end .zmai-status:empty,
 .zmai-front-end .zmai-status p:empty { display: none; }
+.zmai-front-end.zmai-align-left { margin-inline-end: auto; }
+.zmai-front-end.zmai-align-center { margin-inline: auto; text-align: center; }
+.zmai-front-end.zmai-align-center .zmai-avatar-preview { margin-inline: auto; }
+.zmai-front-end.zmai-align-right { margin-inline-start: auto; }

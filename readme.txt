@@ -4,7 +4,7 @@ Tags: local avatar, profile picture, gravatar alternative
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 3.1.0
+Stable tag: 3.2.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,13 +16,14 @@ Author or User Image lets registered users upload an image that WordPress uses a
 
 Features include:
 
-* Self-service avatar upload and removal for registered users.
-* An Avatar upload block and `[author_or_user_image_upload]` shortcode that let signed-in visitors change their own avatar on a page.
+* Self-service avatar upload and removal for registered users (`Users > Author or User Image` and standard WordPress Profile / Edit User screens).
+* An Avatar upload block and `[author_or_user_image_upload]` shortcode with configurable preview visibility, preview size, alignment, and labels for signed-in visitors.
 * An upload setting that allows all users who can read, or only selected roles, on each site.
 * Center-square avatars for new uploads, with the original image kept uncropped.
 * An optional default avatar for registered users without a personal image.
-* Administrator controls to remove images or block individual users from local avatar uploads.
-* An importer for avatars from Simple Local Avatars, One User Avatar, WP User Avatar, WP User Avatars, and User Profile Picture / Metronet.
+* Administrator controls to manage or block individual users on Edit User and `Users > Avatar Management`, plus read-only lifecycle lock diagnostics under Settings.
+* A WordPress REST API (`author-or-user-image/v1`) for authenticated avatar, block-list, bulk, and settings management.
+* An importer for avatars from Simple Local Avatars, One User Avatar, WP User Avatar, WP User Avatars, and User Profile Picture / Metronet, available in admin and via WP-CLI (`wp zmai import`).
 * Media Library storage and WordPress-generated image sizes.
 * Personal-data export and erasure integration.
 * Upgrade migration for images and blocked-user settings created by older versions.
@@ -33,10 +34,10 @@ The plugin does not send image or user data to an external service.
 
 1. Upload the plugin files to `/wp-content/plugins/author-or-user-image`, or install the plugin through the Plugins screen.
 2. Activate **Author or User Image**.
-3. Open **Users > Author or User Image** to upload your avatar.
-4. Administrators can set the site default on that page and manage user images under **Users > Avatar Management**.
+3. Open **Users > Author or User Image** or your WordPress **Profile** screen to upload your avatar.
+4. Administrators can set the site default on **Users > Author or User Image**, manage users under **Users > Avatar Management** or **Edit User**, and inspect lifecycle lock status under **Users > Avatar Management > Settings**.
 5. To let signed-in visitors upload from a page, add the **Avatar upload** block, or use the `[author_or_user_image_upload]` shortcode on a Classic Editor page.
-6. Administrators can import avatars from an older avatar plugin under **Users > Avatar Management > Avatar Migration**.
+6. Administrators can import avatars from an older avatar plugin under **Users > Avatar Management > Avatar Migration** or via WP-CLI (`wp zmai import`).
 
 == Frequently Asked Questions ==
 
@@ -77,17 +78,17 @@ By default, yes. Any logged-in user who can read the site can upload an image fo
 
 Unchecking every role turns off self-service uploads. Existing avatars stay visible, and users can still remove their own. A user with several roles qualifies if any checked role matches. A deleted role stops matching, and a role created later with the same slug matches again. Roles created after you save the list are not included until you check them.
 
-An individual block still stops that user from uploading, whatever their role. Only administrators can change the default image or manage other users.
+An individual block still stops that user from uploading, whatever their role. Only administrators can change the default image or manage other users. On multisite, the Profile screen and REST API self-service endpoints always require membership on that site, while the **All users who can read** setting preserves WordPress's standard `read` capability rule on the dashboard and front-end form.
 
 = Is there an upload rate limit? =
 
-Each user can make five authorized self-upload attempts per minute and twenty per hour, shared between the dashboard and front-end form on the same site. Multisite counters are per site, so a member of several sites has a separate allowance on each. Failed image attempts count too. Removal, privacy erasure, administrator moderation, imports and site-default changes do not use this counter.
+Each user can make five authorized self-upload attempts per minute and twenty per hour, shared across the dashboard, Profile screen, front-end form, and REST API on the same site. Multisite counters are per site, so a member of several sites has a separate allowance on each. Failed image attempts count too. Removal, privacy erasure, administrator moderation, imports and site-default changes do not use this counter.
 
 = How do I add an upload form to a page? =
 
 Insert the **Avatar upload** block in the block editor. On a Classic Editor page, use the `[author_or_user_image_upload]` shortcode instead.
 
-The form changes only the signed-in visitor's own avatar. Neither the block nor the shortcode accepts attributes that choose a user, an attachment, a source URL, or the default avatar. Logged-out visitors see a log-in link. Blocked users, and users the upload setting excludes, see the reason instead of the form. The form posts directly to WordPress, so uploads and removals work with JavaScript turned off.
+The form changes only the signed-in visitor's own avatar. Presentation options (`showPreview`, `previewSize`, `alignment`, and button or link labels) are supported, while attributes that choose a user, an attachment, a source URL, or the default avatar are ignored. Logged-out visitors see a log-in link. Blocked users, and users the upload setting excludes, see the reason instead of the form. The form posts directly to WordPress, so uploads and removals work with JavaScript turned off.
 
 Place the block or shortcode as standalone content. Nesting it inside another form is not supported, and some themes nest content that way.
 
@@ -129,7 +130,7 @@ Trusted PHP code can opt out for an individual operation with the `zmai_strip_im
 
 = How do I import avatars from another plugin? =
 
-Open **Users > Avatar Management > Avatar Migration** and use the import action for the detected source plugin. The tab is always available. A separate **Users > Avatar Migration** menu appears when a supported plugin or saved avatar data is detected, or an unfinished import needs attention. No source selector is needed. Only an administrator can run an import. Competitor imports start only from this screen. The automatic migration of this plugin's older data remains separate. The import runs in pages and reports counts, errors, and completion. Stop pauses the import, and Resume continues it. Closing the page stops further batches, so reopen the page and choose Continue or Resume.
+Open **Users > Avatar Management > Avatar Migration** and use the import action for the detected source plugin. The tab is always available. A separate **Users > Avatar Migration** menu appears when a supported plugin or saved avatar data is detected, or an unfinished import needs attention. No source selector is needed. Only an administrator can run an import. Competitor imports start only from this screen or via WP-CLI (`wp zmai import`). The automatic migration of this plugin's older data remains separate. The import runs in pages and reports counts, errors, and completion. Stop pauses the import, and Resume continues it. Closing the page stops further batches, so reopen the page and choose Continue or Resume.
 
 A user who already has an imported avatar is skipped by later runs, so the first source imported for that user wins. A user who removes an avatar stays without one, and removal blocks any later re-import for that user.
 
@@ -168,6 +169,10 @@ The importer does not migrate source settings or ratings, sync avatars across a 
 
 == Upgrade Notice ==
 
+= 3.2.0 =
+
+Adds Profile and Edit User screen avatar management, REST API (`author-or-user-image/v1`), configurable Avatar upload block/shortcode display attributes, WP-CLI importer and lock recovery commands, and read-only lock diagnostics.
+
 = 3.1.0 =
 
 Adds a front-end upload block and shortcode, role settings, square crops and an avatar importer. Source data stays untouched. Self-uploads are rate limited. Exclude pages with the upload form from full-page caching.
@@ -181,6 +186,15 @@ Fixes privacy erasure and avatar cleanup during user deletion. Release metadata 
 Major security and standards rewrite. Existing settings and legacy JPG avatars are migrated automatically and remain available as fallbacks.
 
 == Changelog ==
+
+= 3.2.0 =
+
+* Added WordPress Profile and Edit User (`profile.php` / `user-edit.php`) avatar upload, removal, and administrator block controls.
+* Added a site-scoped REST API under `author-or-user-image/v1` (`/avatars`, `/avatars/{user_id}`, `/default`, `/blocked`, `/blocked/{user_id}`, `/bulk`, and `/settings`) enforcing capabilities, upload policy, rate limits, and metadata stripping.
+* Added presentation-only attributes (`showPreview`, `previewSize`, `alignment`, `uploadLabel`, `removeLabel`, `loginLabel`) and inspector controls to the Avatar upload block and `[author_or_user_image_upload]` shortcode.
+* Added WP-CLI commands (`wp zmai import sources|status|run|pause|resume|retry|finish` and `wp zmai locks list|unlock`) for batch competitor imports and exact-token lock recovery.
+* Added read-only lifecycle lock diagnostics under **Users > Avatar Management > Settings** without exposing lock tokens in the admin screen.
+* Hardened directory listing, regular-file checks, upload-size checks, and error logging for hosts that disable PHP functions such as scandir, lstat, ini_get, and error_log.
 
 = 3.1.0 =
 

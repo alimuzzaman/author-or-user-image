@@ -22,10 +22,12 @@ try:
  while not (root/'ready').exists() and time.monotonic()<deadline and worker.poll() is None:time.sleep(.05)
  check((root/'ready').exists(),'independent importer reaches real metadata staging under migration and owner locks')
  competing=json.loads(run('batch'));check(competing.get('error')=='zmai_busy','second importer worker cannot advance a live batch')
+ competing_finish=json.loads(run('finish'));check(competing_finish.get('error')=='zmai_busy','concurrent finish cannot interrupt a live batch')
  legacy=json.loads(run('legacy'));check(legacy.get('error')=='zmai_busy','legacy coordinator cannot enter during competitor metadata staging')
  (root/'release').write_text('release')
  out,err=worker.communicate(timeout=60);log.write('PRIMARY\n'+out+err+'\nEXIT '+str(worker.returncode)+'\n');log.flush()
  first=json.loads(out.strip().splitlines()[-1]);check(worker.returncode==0 and first.get('state')=='complete' and first['counts']['imported']==1,'first worker commits exactly one imported owner and terminal revision')
+ stale_finish=json.loads(run('finish'));check(stale_finish==first,'stale finish replay after completion preserves terminal job and counts')
  replay=json.loads(run('verify'));check(replay['job']==first and replay['owned']==1 and replay['mapped']>0 and replay['source_unchanged'],'stale independent replay preserves one owned attachment and source bytes/meta')
 finally:
  (root/'release').write_text('release')

@@ -37,7 +37,7 @@ final class Migration {
 	 * @return void
 	 */
 	public function maybe_migrate() {
-		if ( get_option( self::RELEASE_FAILED_OPTION ) ) {
+		if ( $this->has_release_failure() ) {
 			try {
 				if ( null === $this->store->read_value( 0, '', 'zmai_avatar_lock_migration' ) ) {
 					delete_option( self::RELEASE_FAILED_OPTION );
@@ -55,6 +55,19 @@ final class Migration {
 				$this->migrate_locked();
 			}
 		);
+	}
+
+	/**
+	 * Authoritatively check whether an interrupted migration lock release requires recovery.
+	 *
+	 * @return bool
+	 */
+	public function has_release_failure() {
+		try {
+			return (bool) $this->store->read_value( 0, '', self::RELEASE_FAILED_OPTION );
+		} catch ( \Throwable $error ) {
+			return (bool) get_option( self::RELEASE_FAILED_OPTION );
+		}
 	}
 
 	/**
@@ -501,7 +514,7 @@ final class Migration {
 	 * @return void
 	 */
 	public function migration_notice() {
-		if ( current_user_can( 'manage_options' ) && get_option( self::RELEASE_FAILED_OPTION ) ) {
+		if ( current_user_can( 'manage_options' ) && $this->has_release_failure() ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Author or User Image: a legacy migration lock could not be released. Ask for administrator recovery before retrying migration. See the lifecycle recovery guide.', 'author-or-user-image' ) . '</p></div>';
 		}
 	}
@@ -513,8 +526,10 @@ final class Migration {
 	 * @return void
 	 */
 	private function report_error( WP_Error $error ) {
-		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Persistent migration/release failures need an operator-visible diagnostic; no values or paths are logged.
-		error_log( 'Author or User Image: legacy migration storage or lock-release failure.' );
+		if ( function_exists( 'error_log' ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Persistent migration/release failures need an operator-visible diagnostic; no values or paths are logged.
+			error_log( 'Author or User Image: legacy migration storage or lock-release failure.' );
+		}
 		do_action( 'zmai_migration_error', $error );
 	}
 
@@ -666,7 +681,12 @@ final class Migration {
 					if ( is_wp_error( $clean ) ) {
 						return $clean;
 					}
-					$id = media_handle_sideload( $file, 0, null, array( 'meta_input' => array( Image_Store::ATTACHMENT_OWNER_META => $this->store->owner_name( $user_id ) ) ) );
+					$owner = $this->store->owner_name( $user_id );
+					$id    = Image_Processor::with_unique_filename_file_list(
+						static function () use ( $file, $owner ) {
+							return media_handle_sideload( $file, 0, null, array( 'meta_input' => array( Image_Store::ATTACHMENT_OWNER_META => $owner ) ) );
+						}
+					);
 				} finally {
 					wp_delete_file( $temporary );
 				}

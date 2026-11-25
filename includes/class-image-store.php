@@ -117,24 +117,43 @@ final class Image_Store {
 	/**
 	 * Store an uploaded image for a user or as the site default.
 	 *
-	 * @param string $field   File input name.
-	 * @param int    $user_id User ID, or zero for the default avatar.
+	 * @param string $field    File input name.
+	 * @param int    $user_id  User ID, or zero for the default avatar.
+	 * @param bool   $by_admin Optional. Whether an authorized administrator is uploading for another user.
 	 * @return int|WP_Error Attachment ID, or busy/storage/cleanup error; errors never mean success.
 	 */
-	public function save_upload( $field, $user_id = 0 ) {
+	public function save_upload( $field, $user_id = 0, $by_admin = false ) {
 		if ( ! is_string( $field ) || ! is_scalar( $user_id ) ) {
 			return $this->storage_error();
 		}
-		$field   = sanitize_key( $field );
-		$user_id = absint( $user_id );
+		$field    = sanitize_key( $field );
+		$user_id  = absint( $user_id );
+		$by_admin = (bool) $by_admin;
 		return $this->with_owner_lock(
 			$user_id,
-			function () use ( $field, $user_id ) {
+			function () use ( $field, $user_id, $by_admin ) {
 				$policy = new Upload_Policy( $this );
-				if ( $user_id ? ! $policy->can_upload_fresh( $user_id ) : ! current_user_can( 'manage_options' ) ) {
-					return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
-				}
-				if ( $user_id ) {
+				if ( 0 === $user_id ) {
+					if ( ! current_user_can( 'manage_options' ) ) {
+						return new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+					}
+				} elseif ( $by_admin ) {
+					if ( ! current_user_can( 'manage_options' ) ) {
+						return new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+					}
+					if ( ! $this->user_exists_fresh( $user_id ) || ! $this->user_is_member_fresh( $user_id ) ) {
+						return new WP_Error( 'zmai_invalid_user', __( 'The selected user account does not exist.', 'author-or-user-image' ) );
+					}
+					if ( ! current_user_can( 'edit_user', $user_id ) ) {
+						return new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+					}
+					if ( $this->is_blocked_fresh( $user_id ) ) {
+						return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+					}
+				} else {
+					if ( ! $policy->can_upload_fresh( $user_id ) ) {
+						return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+					}
 					$rate = $this->consume_upload_attempt( $user_id );
 					if ( is_wp_error( $rate ) ) {
 						return $rate;
@@ -146,6 +165,9 @@ final class Image_Store {
 					if ( ! isset( $file[ $key ] ) || ! is_scalar( $file[ $key ] ) ) {
 						return new WP_Error( 'zmai_upload_failed', __( 'The image upload did not complete.', 'author-or-user-image' ) );
 					}
+				}
+				if ( in_array( (int) $file['error'], array( UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE ), true ) ) {
+					return new WP_Error( 'zmai_upload_size', __( 'The image exceeds this site’s upload limit.', 'author-or-user-image' ) );
 				}
 				if ( UPLOAD_ERR_OK !== (int) $file['error'] || ! is_string( $file['tmp_name'] ) || ! is_string( $file['name'] ) ) {
 					return new WP_Error( 'zmai_upload_failed', __( 'The image upload did not complete.', 'author-or-user-image' ) );
@@ -203,8 +225,24 @@ final class Image_Store {
 					return $attachment_id;
 				}
 				$ready = $this->prepare_attachment( $attachment_id, $user_id, $validated['type'], $validated );
-				if ( ! is_wp_error( $ready ) && $user_id && ! $policy->can_upload_fresh( $user_id ) ) {
-					$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+				if ( ! is_wp_error( $ready ) ) {
+					if ( 0 === $user_id ) {
+						if ( ! current_user_can( 'manage_options' ) ) {
+							$ready = new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+						}
+					} elseif ( $by_admin ) {
+						if ( ! current_user_can( 'manage_options' ) ) {
+							$ready = new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+						} elseif ( ! $this->user_exists_fresh( $user_id ) || ! $this->user_is_member_fresh( $user_id ) ) {
+							$ready = new WP_Error( 'zmai_invalid_user', __( 'The selected user account does not exist.', 'author-or-user-image' ) );
+						} elseif ( ! current_user_can( 'edit_user', $user_id ) ) {
+							$ready = new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+						} elseif ( $this->is_blocked_fresh( $user_id ) ) {
+							$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+						}
+					} elseif ( ! $policy->can_upload_fresh( $user_id ) ) {
+						$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+					}
 				}
 				if ( ! is_wp_error( $ready ) ) {
 					$ready = $this->replace_attachment( $attachment_id, $user_id );
@@ -302,7 +340,7 @@ final class Image_Store {
 		add_filter( 'wp_handle_upload', $remember_file, -99999 );
 		add_action( 'add_attachment', $remember_id, -99999 );
 		try {
-			$result = $callback();
+			$result = Image_Processor::with_unique_filename_file_list( $callback );
 		} catch ( \Throwable $error ) {
 			if ( $wpdb->last_error || ! $stage['file'] ) {
 				throw $error;
@@ -328,7 +366,7 @@ final class Image_Store {
 		// Core may write subsizes before a metadata callback throws. The UUID stem
 		// belongs only to this staging call, so its file inventory is still known.
 		$stem  = pathinfo( $stage['file'], PATHINFO_FILENAME );
-		$files = @scandir( dirname( $stage['file'] ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A failed listing must retain the attachment inventory and owner fence.
+		$files = Image_Processor::list_directory( dirname( $stage['file'] ) );
 		if ( false === $files ) {
 			return $this->storage_error( true );
 		}
@@ -345,7 +383,7 @@ final class Image_Store {
 			$file = dirname( $stage['file'] ) . '/' . $filename;
 			wp_delete_file( $file );
 			clearstatcache( true, $file );
-			if ( is_file( $file ) || is_link( $file ) ) {
+			if ( is_file( $file ) || Image_Processor::is_symlink_path( $file ) ) {
 				// No attachment row remains to retain this file inventory for a retry.
 				return $this->storage_error( true );
 			}
@@ -496,10 +534,7 @@ final class Image_Store {
 				'attachment_id' => 0,
 			);
 		}
-		clean_user_cache( $user_id );
-		wp_cache_delete( $user_id, 'user_meta' );
-		$membership = $this->database_values( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE user_id = %d AND meta_key = %s', $wpdb->usermeta, $user_id, $wpdb->get_blog_prefix() . 'capabilities' ) );
-		if ( is_multisite() && ( ! $membership || ! is_array( maybe_unserialize( $membership[0] ) ) || ! maybe_unserialize( $membership[0] ) ) ) {
+		if ( ! $this->user_is_member_fresh( $user_id ) ) {
 			return array(
 				'status'        => 'gone',
 				'attachment_id' => 0,
@@ -793,11 +828,14 @@ final class Image_Store {
 		if ( array_key_exists( $key, self::$attachment_urls ) ) {
 			return self::$attachment_urls[ $key ];
 		}
-		$square                        = $meta['sizes']['zmai-avatar'] ?? null;
-		$width                         = $square['width'] ?? 0;
-		$height                        = $square['height'] ?? 0;
-		$named                         = '1' === $marker && is_array( $square ) && ! empty( $square['file'] ) && is_string( $square['file'] ) && basename( $square['file'] ) === $square['file'] && is_int( $width ) && $width > 0 && $width === $height;
-		$url                           = wp_get_attachment_image_url( $id, $named ? 'zmai-avatar' : array( $size, $size ) );
+		$square = $meta['sizes']['zmai-avatar'] ?? null;
+		$width  = $square['width'] ?? 0;
+		$height = $square['height'] ?? 0;
+		$named  = '1' === $marker && is_array( $square ) && ! empty( $square['file'] ) && is_string( $square['file'] ) && basename( $square['file'] ) === $square['file'] && is_int( $width ) && $width > 0 && $width === $height;
+		$url    = wp_get_attachment_image_url( $id, $named ? 'zmai-avatar' : array( $size, $size ) );
+		if ( count( self::$attachment_urls ) >= 500 ) {
+			self::$attachment_urls = array();
+		}
 		self::$attachment_urls[ $key ] = $url ? $url : '';
 		return self::$attachment_urls[ $key ];
 	}
@@ -1034,6 +1072,27 @@ final class Image_Store {
 	}
 
 	/**
+	 * Authoritative current-site membership inside the owner critical section.
+	 *
+	 * @param int $user_id User ID.
+	 * @return bool
+	 */
+	private function user_is_member_fresh( $user_id ) {
+		global $wpdb;
+		clean_user_cache( $user_id );
+		wp_cache_delete( $user_id, 'user_meta' );
+		if ( ! is_multisite() ) {
+			return true;
+		}
+		$membership = $this->database_values( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE user_id = %d AND meta_key = %s', $wpdb->usermeta, $user_id, $wpdb->get_blog_prefix() . 'capabilities' ) );
+		if ( ! $membership ) {
+			return false;
+		}
+		$caps = maybe_unserialize( $membership[0] );
+		return is_array( $caps ) && ! empty( $caps );
+	}
+
+	/**
 	 * Authoritative block decision inside the owner critical section.
 	 *
 	 * @internal
@@ -1044,9 +1103,21 @@ final class Image_Store {
 		if ( $this->read_value( $user_id, self::BLOCKED_META, '' ) ) {
 			return true;
 		}
-		$user    = get_userdata( $user_id );
+		$login   = $this->user_login_fresh( $user_id );
 		$blocked = $this->read_value( 0, '', self::LEGACY_BLOCK_OPTION );
-		return $user && is_array( $blocked ) && in_array( $user->user_login, $blocked, true );
+		return '' !== $login && is_array( $blocked ) && in_array( $login, $blocked, true );
+	}
+
+	/**
+	 * Authoritative user_login inside critical sections without modifying user caches.
+	 *
+	 * @param int $user_id User ID.
+	 * @return string
+	 */
+	private function user_login_fresh( $user_id ) {
+		global $wpdb;
+		$values = $this->database_values( $wpdb->prepare( 'SELECT user_login FROM %i WHERE ID = %d', $wpdb->users, $user_id ) );
+		return $values ? (string) $values[0] : '';
 	}
 
 	/**
@@ -1268,10 +1339,10 @@ final class Image_Store {
 		if ( null === $legacy && ! $logins ) {
 			return true;
 		}
-		$user   = get_userdata( $user_id );
+		$login  = $this->user_login_fresh( $user_id );
 		$legacy = is_array( $legacy ) ? $legacy : array();
-		if ( $user ) {
-			$legacy = array_values( array_diff( $legacy, array( $user->user_login ) ) );
+		if ( '' !== $login ) {
+			$legacy = array_values( array_diff( $legacy, array( $login ) ) );
 		}
 		return $this->write_value( 0, '', self::LEGACY_BLOCK_OPTION, array_values( array_unique( array_merge( $legacy, $logins ) ) ) );
 	}

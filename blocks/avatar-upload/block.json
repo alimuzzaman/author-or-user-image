@@ -2,13 +2,21 @@
   "$schema": "https://schemas.wp.org/trunk/block.json",
   "apiVersion": 3,
   "name": "author-or-user-image/avatar-upload",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Avatar upload",
   "category": "widgets",
   "icon": "admin-users",
   "description": "Let signed-in visitors upload or remove their own avatar.",
   "textdomain": "author-or-user-image",
   "supports": { "html": false },
+  "attributes": {
+    "showPreview": { "type": "boolean", "default": true },
+    "previewSize": { "type": "integer", "default": 0 },
+    "alignment": { "type": "string", "default": "", "enum": ["", "left", "center", "right"] },
+    "uploadLabel": { "type": "string", "default": "" },
+    "removeLabel": { "type": "string", "default": "" },
+    "loginLabel": { "type": "string", "default": "" }
+  },
   "editorScript": "zmai-avatar-upload-editor",
   "style": "zmai-front-end"
 }

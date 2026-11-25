@@ -11,8 +11,28 @@ $GLOBALS['wp_filter']['option_active_plugins'][10][] = array(
 	},
 	'accepted_args' => 1,
 );
+$GLOBALS['wp_filter']['site_option_active_sitewide_plugins'][10][] = array(
+	'function' => static function ( $plugins ) {
+		return array_filter( $plugins, static function ( $file ) { return 'author_image.php' !== basename( $file ); }, ARRAY_FILTER_USE_KEY );
+	},
+	'accepted_args' => 1,
+);
 define( 'WP_ADMIN', true );
+$zmai_orig_uri  = $_SERVER['REQUEST_URI'] ?? '/';
+$zmai_wp_config = getcwd() . '/wp-config.php';
+if ( is_file( $zmai_wp_config ) ) {
+	$zmai_cfg = (string) file_get_contents( $zmai_wp_config );
+	if ( preg_match( "/define\s*\(\s*['\"]MULTISITE['\"]\s*,\s*true\s*\)/i", $zmai_cfg ) ) {
+		if ( preg_match( "/define\s*\(\s*['\"]DOMAIN_CURRENT_SITE['\"]\s*,\s*['\"]([^'\"]+)['\"]/", $zmai_cfg, $zmai_domain ) ) {
+			$_SERVER['HTTP_HOST'] = $zmai_domain[1];
+		}
+		if ( preg_match( "/define\s*\(\s*['\"]PATH_CURRENT_SITE['\"]\s*,\s*['\"]([^'\"]+)['\"]/", $zmai_cfg, $zmai_path ) ) {
+			$_SERVER['REQUEST_URI'] = $zmai_path[1];
+		}
+	}
+}
 require getcwd() . '/wp-load.php';
+$_SERVER['REQUEST_URI'] = $zmai_orig_uri;
 if ( 'local' !== wp_get_environment_type() ) {
 	http_response_code( 403 );
 	exit;
@@ -20,11 +40,19 @@ if ( 'local' !== wp_get_environment_type() ) {
 if ( class_exists( 'AuthorOrUserImage\\Image_Store' ) ) { throw new RuntimeException( 'Installed target plugin was not skipped.' ); }
 require ZMAI_TEST_HTTP_CANDIDATE . '/author_image.php';
 header( 'Content-Type: application/json' );
+$zmai_blog_id = isset( $_GET['blog_id'] ) ? absint( $_GET['blog_id'] ) : 0;
+if ( is_multisite() && $zmai_blog_id > 1 ) {
+	switch_to_blog( $zmai_blog_id );
+	register_shutdown_function( 'restore_current_blog' );
+}
 $role = isset( $_GET['role'] ) && 'admin' === $_GET['role'] ? 'administrator' : 'subscriber';
 $user = get_user_by( 'login', 'zmai-http-' . $role );
 if ( ! $user ) {
 	$id = wp_insert_user( array( 'user_login' => 'zmai-http-' . $role, 'user_email' => 'zmai-http-' . $role . '@example.invalid', 'user_pass' => 'public-local-test-fixture', 'role' => $role ) );
 	$user = get_userdata( $id );
+}
+if ( is_multisite() && $user && ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) ) {
+	add_user_to_blog( get_current_blog_id(), $user->ID, $role );
 }
 wp_set_current_user( $user->ID );
 $store = new AuthorOrUserImage\Image_Store();

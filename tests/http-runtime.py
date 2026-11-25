@@ -18,6 +18,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--wp-root", required=True, type=Path)
 parser.add_argument("--php", required=True)
 parser.add_argument("--scratch", type=Path, default=Path(os.environ.get("TMPDIR", tempfile.gettempdir())))
+parser.add_argument("--blog-id", type=int, default=0)
 options = parser.parse_args()
 assert (options.wp_root / ".zmai-test-instance").is_file(), "Disposable instance required"
 router = Path(__file__).with_name("http-router.php").resolve()
@@ -34,7 +35,10 @@ def check(condition, name):
 
 
 def request(action="snapshot", role="subscriber", fields=None, image=None, **query):
-    url = base + "/?" + urllib.parse.urlencode(dict(action=action, role=role, **query))
+    params = dict(action=action, role=role, **query)
+    if options.blog_id > 0:
+        params["blog_id"] = options.blog_id
+    url = base + "/?" + urllib.parse.urlencode(params)
     headers = {}
     data = None
     if fields is not None:

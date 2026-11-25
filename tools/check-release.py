@@ -37,6 +37,7 @@ PRODUCTION_FILES: tuple[str, ...] = (
     "author_image.php",
     "includes/class-admin.php",
     "includes/class-admin-import.php",
+    "includes/class-cli.php",
     "includes/class-front-end.php",
     "includes/class-image-processor.php",
     "includes/class-image-metadata.php",
@@ -47,6 +48,8 @@ PRODUCTION_FILES: tuple[str, ...] = (
     "includes/class-migration.php",
     "includes/class-plugin.php",
     "includes/class-privacy.php",
+    "includes/class-profile-admin.php",
+    "includes/class-rest-api.php",
     "includes/class-user-cleanup.php",
     "index.php",
     "readme.txt",
@@ -58,6 +61,7 @@ EXPECTED_DISTIGNORE: frozenset[str] = frozenset(
         "/.github",
         "/.gitignore",
         "/.distignore",
+        "/README.md",
         "/composer.json",
         "/composer.lock",
         "/node_modules",
@@ -73,7 +77,7 @@ EXCLUDED_DIRECTORIES: frozenset[str] = frozenset(
     {".git", ".github", ".wordpress-org", "node_modules", "vendor", "tests", "tools", "docs"}
 )
 EXCLUDED_FILES: frozenset[str] = frozenset(
-    {".gitignore", ".distignore", "composer.json", "composer.lock", "phpcs.xml.dist"}
+    {".gitignore", ".distignore", "README.md", "composer.json", "composer.lock", "phpcs.xml.dist"}
 )
 VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 PLUGIN_NAME = "Author or User Image"

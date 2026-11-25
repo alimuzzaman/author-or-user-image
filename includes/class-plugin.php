@@ -85,6 +85,9 @@ final class Plugin {
 
 		if ( is_admin() ) {
 			new Admin( $this->store );
+			if ( ! is_network_admin() && ! is_user_admin() ) {
+				new Profile_Admin( $this->store );
+			}
 			( new Import_Admin( $this->migration ) )->register();
 			add_action( 'admin_init', array( $this, 'maybe_migrate' ) );
 			add_action( 'admin_notices', array( $this->migration, 'migration_notice' ) );
@@ -92,6 +95,11 @@ final class Plugin {
 
 		new Front_End( $this->store );
 		new Privacy( $this->store, $this->cleanup );
+		new REST_API( $this->store );
+
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			CLI::register( $this->store, $this->migration );
+		}
 	}
 
 	/**
@@ -218,7 +226,7 @@ final class Plugin {
 	 */
 	public function finish_user_deletion( $user_id ) {
 		$result = $this->cleanup->finish_user_deletion( $user_id );
-		if ( is_wp_error( $result ) ) {
+		if ( is_wp_error( $result ) && function_exists( 'error_log' ) ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Core already deleted the user; retain the fence for recovery without aborting bulk deletion.
 			error_log( 'Author or User Image: deletion fence release failed; administrator recovery required.' );
 		}
