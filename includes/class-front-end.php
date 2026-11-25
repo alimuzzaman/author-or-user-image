@@ -50,7 +50,7 @@ final class Front_End {
 	 */
 	public function register() {
 		wp_register_style( 'zmai-front-end', ZMAI_URL . 'assets/css/front-end.css', array(), ZMAI_VERSION );
-		wp_register_script( 'zmai-avatar-upload-editor', ZMAI_URL . 'assets/js/avatar-upload-editor.js', array( 'wp-blocks', 'wp-element', 'wp-block-editor', 'wp-i18n' ), ZMAI_VERSION, true );
+		wp_register_script( 'zmai-avatar-upload-editor', ZMAI_URL . 'assets/js/avatar-upload-editor.js', array( 'wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-i18n' ), ZMAI_VERSION, true );
 		wp_set_script_translations( 'zmai-avatar-upload-editor', 'author-or-user-image' );
 		register_block_type( ZMAI_PATH . 'blocks/avatar-upload', array( 'render_callback' => array( $this, 'render_form' ) ) );
 		add_shortcode( 'author_or_user_image_upload', array( $this, 'render_form' ) );
@@ -171,11 +171,12 @@ final class Front_End {
 	}
 
 	/**
-	 * Render for the current visitor; all block/shortcode attributes are ignored.
+	 * Render for the current visitor using allowlisted presentation attributes only.
 	 *
+	 * @param mixed $attributes Block or shortcode attributes.
 	 * @return string Escaped form markup.
 	 */
-	public function render_form() {
+	public function render_form( $attributes = array() ) {
 		// Widgets and templates render after the early hook, so the form marks its own page.
 		if ( is_user_logged_in() ) {
 			$this->mark_uncacheable();
@@ -186,21 +187,24 @@ final class Front_End {
 		if ( did_action( 'wp_head' ) && ! wp_style_is( 'zmai-front-end', 'done' ) ) {
 			wp_print_styles( array( 'zmai-front-end' ) );
 		}
-		$home   = wp_parse_url( home_url( '/' ) );
-		$origin = $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
+		$opts          = $this->normalize_attributes( $attributes );
+		$wrapper_class = 'zmai-front-end' . ( '' !== $opts['alignment'] ? ' zmai-align-' . $opts['alignment'] : '' );
+		$home          = wp_parse_url( home_url( '/' ) );
+		$origin        = $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' );
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- The strict origin/path allowlist below validates this URL before use.
 		$request = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '/';
 		$return  = self::safe_return_url( $origin . $request );
 		?>
-		<div class="zmai-front-end">
+		<div class="<?php echo esc_attr( $wrapper_class ); ?>">
 		<?php if ( ! is_user_logged_in() ) : ?>
-			<p><a href="<?php echo esc_url( wp_login_url( $return ) ); ?>"><?php esc_html_e( 'Log in to manage your avatar.', 'author-or-user-image' ); ?></a></p>
+			<p><a href="<?php echo esc_url( wp_login_url( $return ) ); ?>"><?php echo esc_html( $opts['loginLabel'] ); ?></a></p>
 		<?php else : ?>
 			<?php
-			$user_id = get_current_user_id();
-			$id      = wp_unique_id( 'zmai-avatar-' );
-			$url     = $this->store->get_url( $user_id, $this->store->get_size(), false );
-			$action  = add_query_arg(
+			$user_id      = get_current_user_id();
+			$id           = wp_unique_id( 'zmai-avatar-' );
+			$preview_size = $opts['previewSize'] > 0 ? $opts['previewSize'] : $this->store->get_size();
+			$url          = $this->store->get_url( $user_id, $preview_size, false );
+			$action       = add_query_arg(
 				array(
 					'action'       => 'zmai_save_avatar',
 					'zmai_context' => 'front',
@@ -212,8 +216,8 @@ final class Front_End {
 			$status = isset( $_GET['zmai_status'] ) ? wp_unslash( $_GET['zmai_status'] ) : '';
 			?>
 			<div class="zmai-status" role="status" aria-live="polite"><p><?php echo esc_html( self::status_message( $status ) ); ?></p></div>
-			<?php if ( $url ) : ?>
-				<img class="zmai-avatar-preview" src="<?php echo esc_url( $url ); ?>" alt="<?php esc_attr_e( 'Your current avatar', 'author-or-user-image' ); ?>" width="<?php echo absint( $this->store->get_size() ); ?>" height="<?php echo absint( $this->store->get_size() ); ?>">
+			<?php if ( $url && $opts['showPreview'] ) : ?>
+				<img class="zmai-avatar-preview" src="<?php echo esc_url( $url ); ?>" alt="<?php esc_attr_e( 'Your current avatar', 'author-or-user-image' ); ?>" width="<?php echo absint( $preview_size ); ?>" height="<?php echo absint( $preview_size ); ?>">
 			<?php endif; ?>
 			<?php if ( $this->store->is_blocked( $user_id ) ) : ?>
 				<p><?php esc_html_e( 'An administrator has disabled local avatar uploads for your account.', 'author-or-user-image' ); ?></p>
@@ -235,7 +239,7 @@ final class Front_End {
 						);
 					?>
 					</p>
-					<button type="submit"><?php esc_html_e( 'Upload image', 'author-or-user-image' ); ?></button>
+					<button type="submit"><?php echo esc_html( $opts['uploadLabel'] ); ?></button>
 				</form>
 			<?php else : ?>
 				<p><?php esc_html_e( 'Your role is not allowed to upload a new avatar on this site. You can still remove your avatar.', 'author-or-user-image' ); ?></p>
@@ -247,12 +251,86 @@ final class Front_End {
 					<input type="hidden" name="zmai_context" value="front">
 					<input type="hidden" name="zmai_return" value="<?php echo esc_url( $return ); ?>">
 					<input type="hidden" name="_wpnonce" value="<?php echo esc_attr( wp_create_nonce( 'zmai_remove_avatar' ) ); ?>">
-					<button type="submit"><?php esc_html_e( 'Remove image', 'author-or-user-image' ); ?></button>
+					<button type="submit"><?php echo esc_html( $opts['removeLabel'] ); ?></button>
 				</form>
 			<?php endif; ?>
 		<?php endif; ?>
 		</div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * Strictly normalize allowlisted presentation attributes for both block and shortcode callers.
+	 *
+	 * @param mixed $attributes Untrusted caller attributes.
+	 * @return array{showPreview:bool,previewSize:int,alignment:string,uploadLabel:string,removeLabel:string,loginLabel:string}
+	 */
+	private function normalize_attributes( $attributes ) {
+		$attrs = is_array( $attributes ) ? $attributes : array();
+
+		$raw_show     = array_key_exists( 'showPreview', $attrs ) ? $attrs['showPreview'] : ( $attrs['show_preview'] ?? true );
+		$show_preview = true;
+		if ( is_bool( $raw_show ) ) {
+			$show_preview = $raw_show;
+		} elseif ( is_int( $raw_show ) ) {
+			$show_preview = 0 !== $raw_show;
+		} elseif ( is_string( $raw_show ) ) {
+			$lower = strtolower( trim( $raw_show ) );
+			if ( in_array( $lower, array( 'false', '0', 'no' ), true ) ) {
+				$show_preview = false;
+			} elseif ( in_array( $lower, array( 'true', '1', 'yes' ), true ) ) {
+				$show_preview = true;
+			}
+		}
+
+		$raw_size     = array_key_exists( 'previewSize', $attrs ) ? $attrs['previewSize'] : ( $attrs['preview_size'] ?? 0 );
+		$preview_size = 0;
+		if ( ( is_int( $raw_size ) || ( is_string( $raw_size ) && preg_match( '/^[0-9]+$/D', trim( $raw_size ) ) ) ) && (int) $raw_size > 0 ) {
+			$preview_size = min( 512, max( 32, (int) $raw_size ) );
+		}
+
+		$raw_align = $attrs['alignment'] ?? '';
+		$alignment = is_string( $raw_align ) && in_array( $raw_align, array( 'left', 'center', 'right' ), true ) ? $raw_align : '';
+
+		return array(
+			'showPreview' => $show_preview,
+			'previewSize' => $preview_size,
+			'alignment'   => $alignment,
+			'uploadLabel' => $this->sanitize_label(
+				array_key_exists( 'uploadLabel', $attrs ) ? $attrs['uploadLabel'] : ( $attrs['upload_label'] ?? '' ),
+				80,
+				__( 'Upload image', 'author-or-user-image' )
+			),
+			'removeLabel' => $this->sanitize_label(
+				array_key_exists( 'removeLabel', $attrs ) ? $attrs['removeLabel'] : ( $attrs['remove_label'] ?? '' ),
+				80,
+				__( 'Remove image', 'author-or-user-image' )
+			),
+			'loginLabel'  => $this->sanitize_label(
+				array_key_exists( 'loginLabel', $attrs ) ? $attrs['loginLabel'] : ( $attrs['login_label'] ?? '' ),
+				120,
+				__( 'Log in to manage your avatar.', 'author-or-user-image' )
+			),
+		);
+	}
+
+	/**
+	 * Sanitize and bound a plain-text UI label attribute.
+	 *
+	 * @param mixed  $value    Raw attribute value.
+	 * @param int    $max_len  Maximum length.
+	 * @param string $fallback Default translated label.
+	 * @return string
+	 */
+	private function sanitize_label( $value, $max_len, $fallback ) {
+		if ( ! is_string( $value ) ) {
+			return $fallback;
+		}
+		$clean = trim( sanitize_text_field( $value ) );
+		if ( '' === $clean ) {
+			return $fallback;
+		}
+		return function_exists( 'mb_substr' ) ? mb_substr( $clean, 0, $max_len ) : substr( $clean, 0, $max_len );
 	}
 }

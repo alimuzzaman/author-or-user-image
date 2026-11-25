@@ -960,6 +960,67 @@ function zmai_fe_late_styles() {
 	zmai_fe_expect( is_string( $second ) && false === strpos( $second, 'assets/css/front-end.css' ), 'a second late shortcode does not duplicate the stylesheet link' );
 }
 
+/** Presentation-only block and shortcode attributes work safely without bypassing owner checks. */
+function zmai_fe_attributes() {
+	$block_path = zmai_fe_path( 'blocks/avatar-upload/block.json' );
+	$meta       = json_decode( (string) file_get_contents( $block_path ), true );
+	$attrs_def  = is_array( $meta['attributes'] ?? null ) ? $meta['attributes'] : array();
+	foreach ( array( 'showPreview', 'previewSize', 'alignment', 'uploadLabel', 'removeLabel', 'loginLabel' ) as $key ) {
+		zmai_fe_expect( isset( $attrs_def[ $key ] ), 'block.json declares attribute ' . $key );
+	}
+
+	list( $user ) = zmai_fe_avatar_user( 'attrs' );
+	$other        = zmai_fe_user( 'subscriber', 'attrs-other' );
+	zmai_fe_legacy_policy();
+
+	// Guest custom login label.
+	wp_set_current_user( 0 );
+	$guest_custom = zmai_fe_render( array( 'loginLabel' => 'Sign in for avatar <script>x</script>' ) );
+	zmai_fe_expect( is_string( $guest_custom ) && false !== strpos( $guest_custom, 'Sign in for avatar' ) && false === strpos( $guest_custom, '<script>' ), 'guest custom loginLabel renders and strips script tags' );
+
+	// Signed-in clamping, alignment, labels, and showPreview=false.
+	wp_set_current_user( $user );
+	$clamped_small = zmai_fe_dom( zmai_fe_render( array( 'previewSize' => 10, 'alignment' => 'center' ) ) );
+	$small_widths  = zmai_fe_attr_values( $clamped_small, '//img[contains(@class,"zmai-avatar-preview")]', 'width' );
+	zmai_fe_expect( array( '32' ) === $small_widths && 1 === zmai_fe_count( $clamped_small, '//div[contains(@class,"zmai-align-center")]' ), 'previewSize clamps minimum 10->32 and alignment=center sets zmai-align-center' );
+
+	$clamped_large = zmai_fe_dom( zmai_fe_render( array( 'previewSize' => 999, 'alignment' => 'bogus' ) ) );
+	$large_widths  = zmai_fe_attr_values( $clamped_large, '//img[contains(@class,"zmai-avatar-preview")]', 'width' );
+	zmai_fe_expect( array( '512' ) === $large_widths && 0 === zmai_fe_count( $clamped_large, '//div[contains(@class,"zmai-align-")]' ), 'previewSize clamps maximum 999->512 and invalid alignment is ignored' );
+
+	$hidden_preview = zmai_fe_render(
+		array(
+			'showPreview' => false,
+			'uploadLabel' => 'Send photo',
+			'removeLabel' => 'Clear photo',
+		)
+	);
+	$hidden_doc = zmai_fe_dom( $hidden_preview );
+	zmai_fe_expect( 0 === zmai_fe_count( $hidden_doc, '//img[contains(@class,"zmai-avatar-preview")]' ) && 1 === zmai_fe_count( $hidden_doc, '//form[contains(@class,"zmai-remove-form")]' ), 'showPreview=false hides preview while keeping remove form' );
+	zmai_fe_expect( false !== strpos( $hidden_preview, 'Send photo' ) && false !== strpos( $hidden_preview, 'Clear photo' ), 'custom uploadLabel and removeLabel render in markup' );
+
+	// Parity between shortcode snake_case and block camelCase, and hostile attribute isolation.
+	$block_html = render_block(
+		array(
+			'blockName'    => 'author-or-user-image/avatar-upload',
+			'attrs'        => array(
+				'showPreview' => true,
+				'previewSize' => 96,
+				'alignment'   => 'right',
+				'uploadLabel' => 'Save avatar',
+				'removeLabel' => 'Delete avatar',
+				'user_id'     => $other,
+				'src'         => 'https://evil.example/a.jpg',
+			),
+			'innerBlocks'  => array(),
+			'innerHTML'    => '',
+			'innerContent' => array(),
+		)
+	);
+	$short_html = do_shortcode( '[author_or_user_image_upload show_preview="true" preview_size="96" alignment="right" upload_label="Save avatar" remove_label="Delete avatar" user_id="' . $other . '" src="https://evil.example/a.jpg"]' );
+	zmai_fe_expect( zmai_fe_same( $block_html, $short_html ) && false === strpos( $block_html, 'evil.example' ), 'block camelCase and shortcode snake_case match and ignore hostile attributes' );
+}
+
 /** Count nocache header passes. */
 function zmai_fe_count_nocache( $headers ) {
 	global $zmai_fe_nocache;
@@ -1037,6 +1098,7 @@ if ( '' !== $zmai_fe_scenario ) {
 	zmai_fe_run( 'return_urls' );
 	zmai_fe_run( 'admin_handlers' );
 	zmai_fe_run( 'late_styles' );
+	zmai_fe_run( 'attributes' );
 	zmai_fe_run( 'cleanup' );
 }
 
