@@ -48,6 +48,7 @@ PRODUCTION_FILES: tuple[str, ...] = (
     "includes/class-plugin.php",
     "includes/class-privacy.php",
     "includes/class-profile-admin.php",
+    "includes/class-rest-api.php",
     "includes/class-user-cleanup.php",
     "index.php",
     "readme.txt",

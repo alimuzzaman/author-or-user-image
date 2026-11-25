@@ -34,6 +34,7 @@ require_once ZMAI_PATH . 'includes/class-privacy.php';
 require_once ZMAI_PATH . 'includes/class-admin.php';
 require_once ZMAI_PATH . 'includes/class-profile-admin.php';
 require_once ZMAI_PATH . 'includes/class-front-end.php';
+require_once ZMAI_PATH . 'includes/class-rest-api.php';
 require_once ZMAI_PATH . 'includes/class-plugin.php';
 
 register_activation_hook( ZMAI_FILE, array( 'AuthorOrUserImage\\Plugin', 'activate' ) );
