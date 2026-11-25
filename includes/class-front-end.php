@@ -269,7 +269,7 @@ final class Front_End {
 	private function normalize_attributes( $attributes ) {
 		$attrs = is_array( $attributes ) ? $attributes : array();
 
-		$raw_show     = array_key_exists( 'showPreview', $attrs ) ? $attrs['showPreview'] : ( $attrs['show_preview'] ?? true );
+		$raw_show     = $this->pick_attribute( $attrs, 'showPreview', 'show_preview', true );
 		$show_preview = true;
 		if ( is_bool( $raw_show ) ) {
 			$show_preview = $raw_show;
@@ -284,7 +284,7 @@ final class Front_End {
 			}
 		}
 
-		$raw_size     = array_key_exists( 'previewSize', $attrs ) ? $attrs['previewSize'] : ( $attrs['preview_size'] ?? 0 );
+		$raw_size     = $this->pick_attribute( $attrs, 'previewSize', 'preview_size', 0 );
 		$preview_size = 0;
 		if ( ( is_int( $raw_size ) || ( is_string( $raw_size ) && preg_match( '/^[0-9]+$/D', trim( $raw_size ) ) ) ) && (int) $raw_size > 0 ) {
 			$preview_size = min( 512, max( 32, (int) $raw_size ) );
@@ -298,21 +298,44 @@ final class Front_End {
 			'previewSize' => $preview_size,
 			'alignment'   => $alignment,
 			'uploadLabel' => $this->sanitize_label(
-				array_key_exists( 'uploadLabel', $attrs ) ? $attrs['uploadLabel'] : ( $attrs['upload_label'] ?? '' ),
+				$this->pick_attribute( $attrs, 'uploadLabel', 'upload_label', '' ),
 				80,
 				__( 'Upload image', 'author-or-user-image' )
 			),
 			'removeLabel' => $this->sanitize_label(
-				array_key_exists( 'removeLabel', $attrs ) ? $attrs['removeLabel'] : ( $attrs['remove_label'] ?? '' ),
+				$this->pick_attribute( $attrs, 'removeLabel', 'remove_label', '' ),
 				80,
 				__( 'Remove image', 'author-or-user-image' )
 			),
 			'loginLabel'  => $this->sanitize_label(
-				array_key_exists( 'loginLabel', $attrs ) ? $attrs['loginLabel'] : ( $attrs['login_label'] ?? '' ),
+				$this->pick_attribute( $attrs, 'loginLabel', 'login_label', '' ),
 				120,
 				__( 'Log in to manage your avatar.', 'author-or-user-image' )
 			),
 		);
+	}
+
+	/**
+	 * Read an attribute supporting block camelCase, shortcode snake_case, and lowercased shortcode keys.
+	 *
+	 * @param array<string,mixed> $attrs   Caller attribute map.
+	 * @param string              $camel   CamelCase attribute key.
+	 * @param string              $snake   Snake_case attribute key.
+	 * @param mixed               $fallback Default value when unset.
+	 * @return mixed
+	 */
+	private function pick_attribute( array $attrs, $camel, $snake, $fallback ) {
+		if ( array_key_exists( $camel, $attrs ) ) {
+			return $attrs[ $camel ];
+		}
+		if ( array_key_exists( $snake, $attrs ) ) {
+			return $attrs[ $snake ];
+		}
+		$lower = strtolower( $camel );
+		if ( array_key_exists( $lower, $attrs ) ) {
+			return $attrs[ $lower ];
+		}
+		return $fallback;
 	}
 
 	/**

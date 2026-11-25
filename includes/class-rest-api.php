@@ -930,6 +930,7 @@ final class REST_API {
 				'zmai_upload_failed',
 				'zmai_upload_provenance',
 				'zmai_upload_missing',
+				'upload_error',
 				'zmai_invalid_policy',
 				'zmai_invalid_role',
 				'zmai_invalid_size',
@@ -939,6 +940,6 @@ final class REST_API {
 		) ) {
 			$status = 400;
 		}
-		return new WP_Error( $code, $error->get_error_message(), array( 'status' => $status ) );
+		return new WP_Error( $code, Admin::upload_error_message( $code ), array( 'status' => $status ) );
 	}
 }

@@ -258,6 +258,38 @@ try {
 	$err_bag = new WP_Error();
 	$admin->attach_profile_errors( $err_bag, true, $sub_obj );
 	$zmai_pa_expect( ! $store->is_blocked( $sub_id ) && ! $err_bag->has_errors(), 'admin unchecking block via Edit User unblocks user' );
+
+	// 4. Multisite non-member isolation even for super administrators.
+	if ( is_multisite() ) {
+		$sites = get_sites( array( 'fields' => 'ids', 'number' => 2 ) );
+		if ( count( $sites ) >= 2 ) {
+			$blog2        = (int) $sites[1];
+			$nonmember_id = $create_user( 'subscriber' );
+			$nm_obj       = get_userdata( $nonmember_id );
+			switch_to_blog( $blog2 );
+			try {
+				wp_set_current_user( $admin_id );
+				ob_start();
+				$admin->render_profile_section( $nm_obj );
+				$nm_html = (string) ob_get_clean();
+
+				$_POST = array(
+					'zmai_profile_nonce'         => wp_create_nonce( 'zmai_profile_avatar_' . $nonmember_id ),
+					'zmai_profile_block_present' => '1',
+					'zmai_profile_blocked'       => '1',
+				);
+				$admin->save_profile( $nonmember_id );
+				$nm_bag = new WP_Error();
+				$admin->attach_profile_errors( $nm_bag, true, $nm_obj );
+				$zmai_pa_expect(
+					'' === $nm_html && in_array( 'zmai_forbidden', $nm_bag->get_error_codes(), true ) && ! $store->is_blocked( $nonmember_id ),
+					'multisite super admin cannot view or edit non-member user on another site via Profile_Admin'
+				);
+			} finally {
+				restore_current_blog();
+			}
+		}
+	}
 } finally {
 	$_GET    = $previous_get;
 	$_POST   = $previous_post;

@@ -86,7 +86,7 @@ final class Profile_Admin {
 	public function render_profile_section( WP_User $user ) {
 		$target_id      = (int) $user->ID;
 		$is_self        = get_current_user_id() === $target_id;
-		$can_admin_edit = current_user_can( 'manage_options' ) && current_user_can( 'edit_user', $target_id );
+		$can_admin_edit = $this->can_admin_edit_target( $target_id );
 		if ( ( ! $is_self && ! $can_admin_edit ) || ( $is_self && ! current_user_can( 'read' ) ) ) {
 			return;
 		}
@@ -173,7 +173,7 @@ final class Profile_Admin {
 		}
 
 		$is_self        = get_current_user_id() === $target_id;
-		$can_admin_edit = current_user_can( 'manage_options' ) && current_user_can( 'edit_user', $target_id );
+		$can_admin_edit = $this->can_admin_edit_target( $target_id );
 		if ( ( ! $is_self && ! $can_admin_edit ) || ( $is_self && ! current_user_can( 'read' ) ) ) {
 			$this->record_error( $target_id, 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
 			return;
@@ -263,5 +263,18 @@ final class Profile_Admin {
 	private function record_wp_error( $user_id, WP_Error $error ) {
 		$code = $error->get_error_code();
 		$this->record_error( $user_id, $code, Admin::upload_error_message( $code ) );
+	}
+
+	/**
+	 * Check administrator capabilities and current-site membership on multisite.
+	 *
+	 * @param int $target_id Target user ID.
+	 * @return bool
+	 */
+	private function can_admin_edit_target( $target_id ) {
+		if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $target_id ) ) {
+			return false;
+		}
+		return ! is_multisite() || is_user_member_of_blog( $target_id, get_current_blog_id() );
 	}
 }

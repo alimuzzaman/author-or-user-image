@@ -193,8 +193,7 @@ Major security and standards rewrite. Existing settings and legacy JPG avatars a
 * Added a site-scoped REST API under `author-or-user-image/v1` (`/avatars`, `/avatars/{user_id}`, `/default`, `/blocked`, `/blocked/{user_id}`, `/bulk`, and `/settings`) enforcing capabilities, upload policy, rate limits, and metadata stripping.
 * Added presentation-only attributes (`showPreview`, `previewSize`, `alignment`, `uploadLabel`, `removeLabel`, `loginLabel`) and inspector controls to the Avatar upload block and `[author_or_user_image_upload]` shortcode.
 * Added WP-CLI commands (`wp zmai import sources|status|run|pause|resume|retry|finish` and `wp zmai locks list|unlock`) for batch competitor imports and exact-token lock recovery.
-* Added read-only lifecycle lock diagnostics under **Users > Avatar Management > Settings** without exposing lock tokens.
-* Added repository CI checks, poisoned object-cache resilience checks, concurrent importer Finish-vs-Batch tests, and multisite subsite HTTP multipart test coverage.
+* Added read-only lifecycle lock diagnostics under **Users > Avatar Management > Settings** without exposing lock tokens in the admin screen.
 
 = 3.1.0 =
 

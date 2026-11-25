@@ -777,12 +777,17 @@ final class Admin {
 			'zmai_upload_size'             => __( 'The image exceeds this site’s upload limit. Choose a smaller image.', 'author-or-user-image' ),
 			'zmai_rate_limited'            => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
 			'zmai_blocked'                 => __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ),
+			'zmai_forbidden'               => __( 'You are not allowed to do that.', 'author-or-user-image' ),
 			'zmai_metadata_failed'         => __( 'The image metadata could not be removed safely. Choose another image.', 'author-or-user-image' ),
 			'zmai_metadata_cmyk'           => __( 'This server cannot safely normalize this CMYK JPEG. Convert it to RGB and try again.', 'author-or-user-image' ),
 			'zmai_invalid_dimensions'      => __( 'Choose an image no larger than 4096 by 4096 pixels.', 'author-or-user-image' ),
 			'zmai_jpeg_exif_unavailable'   => __( 'JPEG processing requires server EXIF support.', 'author-or-user-image' ),
+			'zmai_upload_missing'          => __( 'Choose an image file to upload.', 'author-or-user-image' ),
+			'zmai_upload_provenance'       => __( 'Choose a newly uploaded image.', 'author-or-user-image' ),
+			'zmai_invalid_policy'          => __( 'Choose a valid upload policy and known site roles.', 'author-or-user-image' ),
 			'zmai_busy'                    => __( 'Avatar data is busy or unavailable. Please retry.', 'author-or-user-image' ),
 			'zmai_invalid_user'            => __( 'The selected user account does not exist.', 'author-or-user-image' ),
+			'zmai_user_not_found'          => __( 'The requested user was not found.', 'author-or-user-image' ),
 		);
 		return $errors[ $code ] ?? __( 'The image change could not be completed. Please try again or contact an administrator.', 'author-or-user-image' );
 	}

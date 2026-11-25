@@ -141,7 +141,7 @@ final class Image_Store {
 					if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $user_id ) ) {
 						return new WP_Error( 'zmai_blocked', __( 'You are not allowed to change this user’s avatar.', 'author-or-user-image' ) );
 					}
-					if ( ! $this->user_exists_fresh( $user_id ) ) {
+					if ( ! $this->user_exists_fresh( $user_id ) || ( is_multisite() && ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) ) {
 						return new WP_Error( 'zmai_invalid_user', __( 'The selected user account does not exist.', 'author-or-user-image' ) );
 					}
 					if ( $this->is_blocked_fresh( $user_id ) ) {
@@ -221,7 +221,7 @@ final class Image_Store {
 				$ready = $this->prepare_attachment( $attachment_id, $user_id, $validated['type'], $validated );
 				if ( ! is_wp_error( $ready ) && $user_id ) {
 					if ( $by_admin ) {
-						if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $user_id ) || ! $this->user_exists_fresh( $user_id ) || $this->is_blocked_fresh( $user_id ) ) {
+						if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $user_id ) || ! $this->user_exists_fresh( $user_id ) || ( is_multisite() && ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) || $this->is_blocked_fresh( $user_id ) ) {
 							$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
 						}
 					} elseif ( ! $policy->can_upload_fresh( $user_id ) ) {

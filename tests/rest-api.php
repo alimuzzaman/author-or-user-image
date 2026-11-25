@@ -317,6 +317,22 @@ try {
 	$def_del = $call( 'DELETE', '/default' );
 	$zmai_rest_expect( 200 === $def_del->get_status() && 0 === $store->get_default_attachment_id(), 'DELETE /default removes default avatar' );
 
+	// 3b. map_error() never leaks raw internal upload_error paths and maps upload_error -> 400.
+	$rest_ctrl = new REST_API( $store );
+	$map_ref   = new ReflectionMethod( REST_API::class, 'map_error' );
+	if ( PHP_VERSION_ID < 80100 ) {
+		$map_ref->setAccessible( true );
+	}
+	$mapped_upload = $map_ref->invoke( $rest_ctrl, new WP_Error( 'upload_error', '/var/www/outside-abspath/secret/path could not be written' ) );
+	$mapped_data   = $mapped_upload->get_error_data();
+	$zmai_rest_expect(
+		is_wp_error( $mapped_upload )
+		&& 400 === ( $mapped_data['status'] ?? 0 )
+		&& false === strpos( $mapped_upload->get_error_message(), '/var/www/outside-abspath' )
+		&& false === strpos( $mapped_upload->get_error_message(), 'secret/path' ),
+		'REST map_error() maps upload_error to HTTP 400 with fixed message and no internal path leakage'
+	);
+
 	// 4. Multisite non-member isolation for a site-only administrator (not super admin).
 	if ( is_multisite() ) {
 		$sites = get_sites( array( 'fields' => 'ids', 'number' => 2 ) );

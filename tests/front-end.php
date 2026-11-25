@@ -1019,6 +1019,9 @@ function zmai_fe_attributes() {
 	);
 	$short_html = do_shortcode( '[author_or_user_image_upload show_preview="true" preview_size="96" alignment="right" upload_label="Save avatar" remove_label="Delete avatar" user_id="' . $other . '" src="https://evil.example/a.jpg"]' );
 	zmai_fe_expect( zmai_fe_same( $block_html, $short_html ) && false === strpos( $block_html, 'evil.example' ), 'block camelCase and shortcode snake_case match and ignore hostile attributes' );
+
+	$short_camel_html = do_shortcode( '[author_or_user_image_upload showPreview="true" previewSize="96" alignment="right" uploadLabel="Save avatar" removeLabel="Delete avatar"]' );
+	zmai_fe_expect( zmai_fe_same( $block_html, $short_camel_html ), 'shortcode camelCase keys survive shortcode_parse_atts lowercasing and match block output' );
 }
 
 /** Count nocache header passes. */

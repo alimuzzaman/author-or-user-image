@@ -192,6 +192,9 @@ final class CLI {
 
 		$max_batches = 0;
 		if ( isset( $assoc_args['max-batches'] ) ) {
+			if ( is_bool( $assoc_args['max-batches'] ) || ! is_scalar( $assoc_args['max-batches'] ) ) {
+				\WP_CLI::error( 'Invalid --max-batches value. Provide a non-negative integer.' );
+			}
 			$raw_max = (string) $assoc_args['max-batches'];
 			if ( ! preg_match( '/^(0|[1-9][0-9]*)$/D', $raw_max ) ) {
 				\WP_CLI::error( 'Invalid --max-batches value. Provide a non-negative integer.' );
@@ -237,6 +240,9 @@ final class CLI {
 			}
 			$job = $next;
 			++$batches;
+			if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
+				\WP_CLI\Utils\wp_clear_object_cache();
+			}
 		}
 
 		if ( is_wp_error( $job ) ) {
@@ -270,8 +276,10 @@ final class CLI {
 			\WP_CLI::error( 'Import stopped in recovery_required state. Reconcile retained locks before continuing.' );
 		} elseif ( 'paused_with_failures' === $job['state'] ) {
 			\WP_CLI::warning( 'Import paused with temporary failures. Run "wp zmai import retry" or "wp zmai import finish".' );
-		} else {
+		} elseif ( $max_batches > 0 ) {
 			\WP_CLI::warning( 'Stopped after reaching --max-batches limit; job remains running.' );
+		} else {
+			\WP_CLI::warning( 'Stopped after reaching the 10000-batch safety cap; re-run "wp zmai import run" to continue.' );
 		}
 	}
 
@@ -363,7 +371,7 @@ final class CLI {
 			\WP_CLI::error( $locks->get_error_message() );
 		}
 
-		if ( 'table' === $format && get_option( Migration::RELEASE_FAILED_OPTION ) ) {
+		if ( get_option( Migration::RELEASE_FAILED_OPTION ) ) {
 			\WP_CLI::warning( 'Option zmai_migration_release_failed is set on this site.' );
 		}
 
