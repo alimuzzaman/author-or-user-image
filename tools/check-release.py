@@ -47,6 +47,7 @@ PRODUCTION_FILES: tuple[str, ...] = (
     "includes/class-migration.php",
     "includes/class-plugin.php",
     "includes/class-privacy.php",
+    "includes/class-profile-admin.php",
     "includes/class-user-cleanup.php",
     "index.php",
     "readme.txt",

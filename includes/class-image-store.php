@@ -117,24 +117,40 @@ final class Image_Store {
 	/**
 	 * Store an uploaded image for a user or as the site default.
 	 *
-	 * @param string $field   File input name.
-	 * @param int    $user_id User ID, or zero for the default avatar.
+	 * @param string $field    File input name.
+	 * @param int    $user_id  User ID, or zero for the default avatar.
+	 * @param bool   $by_admin Optional. Whether an authorized administrator is uploading for another user.
 	 * @return int|WP_Error Attachment ID, or busy/storage/cleanup error; errors never mean success.
 	 */
-	public function save_upload( $field, $user_id = 0 ) {
+	public function save_upload( $field, $user_id = 0, $by_admin = false ) {
 		if ( ! is_string( $field ) || ! is_scalar( $user_id ) ) {
 			return $this->storage_error();
 		}
-		$field   = sanitize_key( $field );
-		$user_id = absint( $user_id );
+		$field    = sanitize_key( $field );
+		$user_id  = absint( $user_id );
+		$by_admin = (bool) $by_admin;
 		return $this->with_owner_lock(
 			$user_id,
-			function () use ( $field, $user_id ) {
+			function () use ( $field, $user_id, $by_admin ) {
 				$policy = new Upload_Policy( $this );
-				if ( $user_id ? ! $policy->can_upload_fresh( $user_id ) : ! current_user_can( 'manage_options' ) ) {
-					return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
-				}
-				if ( $user_id ) {
+				if ( 0 === $user_id ) {
+					if ( ! current_user_can( 'manage_options' ) ) {
+						return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+					}
+				} elseif ( $by_admin ) {
+					if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $user_id ) ) {
+						return new WP_Error( 'zmai_blocked', __( 'You are not allowed to change this user’s avatar.', 'author-or-user-image' ) );
+					}
+					if ( ! $this->user_exists_fresh( $user_id ) ) {
+						return new WP_Error( 'zmai_invalid_user', __( 'The selected user account does not exist.', 'author-or-user-image' ) );
+					}
+					if ( $this->is_blocked_fresh( $user_id ) ) {
+						return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+					}
+				} else {
+					if ( ! $policy->can_upload_fresh( $user_id ) ) {
+						return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+					}
 					$rate = $this->consume_upload_attempt( $user_id );
 					if ( is_wp_error( $rate ) ) {
 						return $rate;
@@ -203,8 +219,14 @@ final class Image_Store {
 					return $attachment_id;
 				}
 				$ready = $this->prepare_attachment( $attachment_id, $user_id, $validated['type'], $validated );
-				if ( ! is_wp_error( $ready ) && $user_id && ! $policy->can_upload_fresh( $user_id ) ) {
-					$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+				if ( ! is_wp_error( $ready ) && $user_id ) {
+					if ( $by_admin ) {
+						if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $user_id ) || ! $this->user_exists_fresh( $user_id ) || $this->is_blocked_fresh( $user_id ) ) {
+							$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+						}
+					} elseif ( ! $policy->can_upload_fresh( $user_id ) ) {
+						$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+					}
 				}
 				if ( ! is_wp_error( $ready ) ) {
 					$ready = $this->replace_attachment( $attachment_id, $user_id );

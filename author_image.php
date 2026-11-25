@@ -32,6 +32,7 @@ require_once ZMAI_PATH . 'includes/class-admin-import.php';
 require_once ZMAI_PATH . 'includes/class-user-cleanup.php';
 require_once ZMAI_PATH . 'includes/class-privacy.php';
 require_once ZMAI_PATH . 'includes/class-admin.php';
+require_once ZMAI_PATH . 'includes/class-profile-admin.php';
 require_once ZMAI_PATH . 'includes/class-front-end.php';
 require_once ZMAI_PATH . 'includes/class-plugin.php';
 

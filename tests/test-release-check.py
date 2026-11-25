@@ -110,8 +110,8 @@ class ReleaseCheckTests(unittest.TestCase):
         with zipfile.ZipFile(report.zip_path) as archive:
             members = tuple(sorted(archive.namelist()))
 
-        self.assertEqual(len(RELEASE_CHECK.PRODUCTION_FILES), 24)
-        self.assertTrue({"includes/class-lock.php", "includes/class-migration.php", "includes/class-user-cleanup.php"}.issubset(members))
+        self.assertEqual(len(RELEASE_CHECK.PRODUCTION_FILES), 25)
+        self.assertTrue({"includes/class-lock.php", "includes/class-migration.php", "includes/class-user-cleanup.php", "includes/class-profile-admin.php"}.issubset(members))
         self.assertEqual(members, tuple(sorted(RELEASE_CHECK.PRODUCTION_FILES)))
         self.assertEqual(report.members, members)
         self.assertEqual(len(report.sha256), 64)

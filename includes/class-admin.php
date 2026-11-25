@@ -703,17 +703,7 @@ final class Admin {
 		if ( 'operation-error' === $status ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'The requested changes did not all complete. Avatar data may be busy or need administrator recovery. Please retry.', 'author-or-user-image' ) . '</p></div>';
 		} elseif ( in_array( $status, array( 'upload-error', 'remove-error' ), true ) ) {
-			$errors  = array(
-				'zmai_invalid_image'      => __( 'Choose a JPEG, PNG, or static WebP image.', 'author-or-user-image' ),
-				'zmai_upload_size'        => __( 'The image exceeds this site’s upload limit. Choose a smaller image.', 'author-or-user-image' ),
-				'zmai_rate_limited'       => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
-				'zmai_blocked'            => __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ),
-				'zmai_metadata_failed'    => __( 'The image metadata could not be removed safely. Choose another image.', 'author-or-user-image' ),
-				'zmai_metadata_cmyk'      => __( 'This server cannot safely normalize this CMYK JPEG. Convert it to RGB and try again.', 'author-or-user-image' ),
-				'zmai_invalid_dimensions' => __( 'Choose an image no larger than 4096 by 4096 pixels.', 'author-or-user-image' ),
-			);
-			$message = $errors[ $error ] ?? __( 'The image change could not be completed. Please try again or contact an administrator.', 'author-or-user-image' );
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( self::upload_error_message( $error ) ) . '</p></div>';
 		} elseif ( isset( $map[ $status ] ) ) {
 			$class = 'nothing-selected' === $status ? 'notice-warning' : 'notice-success';
 			echo '<div class="notice ' . esc_attr( $class ) . ' is-dismissible"><p>' . esc_html( $map[ $status ] ) . '</p></div>';
@@ -771,5 +761,29 @@ final class Admin {
 			)
 		);
 		exit;
+	}
+
+	/**
+	 * Map a typed avatar operation error code to a fixed translated message.
+	 *
+	 * @param string $code Typed error code.
+	 * @return string
+	 */
+	public static function upload_error_message( $code ) {
+		$errors = array(
+			'zmai_invalid_image'           => __( 'Choose a JPEG, PNG, or static WebP image.', 'author-or-user-image' ),
+			'zmai_invalid_image_container' => __( 'Choose a JPEG, PNG, or static WebP image.', 'author-or-user-image' ),
+			'zmai_animated_image'          => __( 'Animated images are not supported. Choose a static JPEG, PNG, or WebP image.', 'author-or-user-image' ),
+			'zmai_upload_size'             => __( 'The image exceeds this site’s upload limit. Choose a smaller image.', 'author-or-user-image' ),
+			'zmai_rate_limited'            => __( 'Too many avatar uploads. Please wait before trying again.', 'author-or-user-image' ),
+			'zmai_blocked'                 => __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ),
+			'zmai_metadata_failed'         => __( 'The image metadata could not be removed safely. Choose another image.', 'author-or-user-image' ),
+			'zmai_metadata_cmyk'           => __( 'This server cannot safely normalize this CMYK JPEG. Convert it to RGB and try again.', 'author-or-user-image' ),
+			'zmai_invalid_dimensions'      => __( 'Choose an image no larger than 4096 by 4096 pixels.', 'author-or-user-image' ),
+			'zmai_jpeg_exif_unavailable'   => __( 'JPEG processing requires server EXIF support.', 'author-or-user-image' ),
+			'zmai_busy'                    => __( 'Avatar data is busy or unavailable. Please retry.', 'author-or-user-image' ),
+			'zmai_invalid_user'            => __( 'The selected user account does not exist.', 'author-or-user-image' ),
+		);
+		return $errors[ $code ] ?? __( 'The image change could not be completed. Please try again or contact an administrator.', 'author-or-user-image' );
 	}
 }
