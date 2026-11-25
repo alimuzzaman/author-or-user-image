@@ -135,14 +135,17 @@ final class Image_Store {
 				$policy = new Upload_Policy( $this );
 				if ( 0 === $user_id ) {
 					if ( ! current_user_can( 'manage_options' ) ) {
-						return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
+						return new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
 					}
 				} elseif ( $by_admin ) {
-					if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $user_id ) ) {
-						return new WP_Error( 'zmai_blocked', __( 'You are not allowed to change this user’s avatar.', 'author-or-user-image' ) );
+					if ( ! current_user_can( 'manage_options' ) ) {
+						return new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
 					}
-					if ( ! $this->user_exists_fresh( $user_id ) || ( is_multisite() && ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) ) {
+					if ( ! $this->user_exists_fresh( $user_id ) || ! $this->user_is_member_fresh( $user_id ) ) {
 						return new WP_Error( 'zmai_invalid_user', __( 'The selected user account does not exist.', 'author-or-user-image' ) );
+					}
+					if ( ! current_user_can( 'edit_user', $user_id ) ) {
+						return new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
 					}
 					if ( $this->is_blocked_fresh( $user_id ) ) {
 						return new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
@@ -162,6 +165,9 @@ final class Image_Store {
 					if ( ! isset( $file[ $key ] ) || ! is_scalar( $file[ $key ] ) ) {
 						return new WP_Error( 'zmai_upload_failed', __( 'The image upload did not complete.', 'author-or-user-image' ) );
 					}
+				}
+				if ( in_array( (int) $file['error'], array( UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE ), true ) ) {
+					return new WP_Error( 'zmai_upload_size', __( 'The image exceeds this site’s upload limit.', 'author-or-user-image' ) );
 				}
 				if ( UPLOAD_ERR_OK !== (int) $file['error'] || ! is_string( $file['tmp_name'] ) || ! is_string( $file['name'] ) ) {
 					return new WP_Error( 'zmai_upload_failed', __( 'The image upload did not complete.', 'author-or-user-image' ) );
@@ -219,9 +225,19 @@ final class Image_Store {
 					return $attachment_id;
 				}
 				$ready = $this->prepare_attachment( $attachment_id, $user_id, $validated['type'], $validated );
-				if ( ! is_wp_error( $ready ) && $user_id ) {
-					if ( $by_admin ) {
-						if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'edit_user', $user_id ) || ! $this->user_exists_fresh( $user_id ) || ( is_multisite() && ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) || $this->is_blocked_fresh( $user_id ) ) {
+				if ( ! is_wp_error( $ready ) ) {
+					if ( 0 === $user_id ) {
+						if ( ! current_user_can( 'manage_options' ) ) {
+							$ready = new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+						}
+					} elseif ( $by_admin ) {
+						if ( ! current_user_can( 'manage_options' ) ) {
+							$ready = new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+						} elseif ( ! $this->user_exists_fresh( $user_id ) || ! $this->user_is_member_fresh( $user_id ) ) {
+							$ready = new WP_Error( 'zmai_invalid_user', __( 'The selected user account does not exist.', 'author-or-user-image' ) );
+						} elseif ( ! current_user_can( 'edit_user', $user_id ) ) {
+							$ready = new WP_Error( 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
+						} elseif ( $this->is_blocked_fresh( $user_id ) ) {
 							$ready = new WP_Error( 'zmai_blocked', __( 'Local avatar uploads are disabled for this account.', 'author-or-user-image' ) );
 						}
 					} elseif ( ! $policy->can_upload_fresh( $user_id ) ) {
@@ -518,10 +534,7 @@ final class Image_Store {
 				'attachment_id' => 0,
 			);
 		}
-		clean_user_cache( $user_id );
-		wp_cache_delete( $user_id, 'user_meta' );
-		$membership = $this->database_values( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE user_id = %d AND meta_key = %s', $wpdb->usermeta, $user_id, $wpdb->get_blog_prefix() . 'capabilities' ) );
-		if ( is_multisite() && ( ! $membership || ! is_array( maybe_unserialize( $membership[0] ) ) || ! maybe_unserialize( $membership[0] ) ) ) {
+		if ( ! $this->user_is_member_fresh( $user_id ) ) {
 			return array(
 				'status'        => 'gone',
 				'attachment_id' => 0,
@@ -815,11 +828,14 @@ final class Image_Store {
 		if ( array_key_exists( $key, self::$attachment_urls ) ) {
 			return self::$attachment_urls[ $key ];
 		}
-		$square                        = $meta['sizes']['zmai-avatar'] ?? null;
-		$width                         = $square['width'] ?? 0;
-		$height                        = $square['height'] ?? 0;
-		$named                         = '1' === $marker && is_array( $square ) && ! empty( $square['file'] ) && is_string( $square['file'] ) && basename( $square['file'] ) === $square['file'] && is_int( $width ) && $width > 0 && $width === $height;
-		$url                           = wp_get_attachment_image_url( $id, $named ? 'zmai-avatar' : array( $size, $size ) );
+		$square = $meta['sizes']['zmai-avatar'] ?? null;
+		$width  = $square['width'] ?? 0;
+		$height = $square['height'] ?? 0;
+		$named  = '1' === $marker && is_array( $square ) && ! empty( $square['file'] ) && is_string( $square['file'] ) && basename( $square['file'] ) === $square['file'] && is_int( $width ) && $width > 0 && $width === $height;
+		$url    = wp_get_attachment_image_url( $id, $named ? 'zmai-avatar' : array( $size, $size ) );
+		if ( count( self::$attachment_urls ) >= 500 ) {
+			self::$attachment_urls = array();
+		}
 		self::$attachment_urls[ $key ] = $url ? $url : '';
 		return self::$attachment_urls[ $key ];
 	}
@@ -1056,6 +1072,27 @@ final class Image_Store {
 	}
 
 	/**
+	 * Authoritative current-site membership inside the owner critical section.
+	 *
+	 * @param int $user_id User ID.
+	 * @return bool
+	 */
+	private function user_is_member_fresh( $user_id ) {
+		global $wpdb;
+		clean_user_cache( $user_id );
+		wp_cache_delete( $user_id, 'user_meta' );
+		if ( ! is_multisite() ) {
+			return true;
+		}
+		$membership = $this->database_values( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE user_id = %d AND meta_key = %s', $wpdb->usermeta, $user_id, $wpdb->get_blog_prefix() . 'capabilities' ) );
+		if ( ! $membership ) {
+			return false;
+		}
+		$caps = maybe_unserialize( $membership[0] );
+		return is_array( $caps ) && ! empty( $caps );
+	}
+
+	/**
 	 * Authoritative block decision inside the owner critical section.
 	 *
 	 * @internal
@@ -1066,9 +1103,21 @@ final class Image_Store {
 		if ( $this->read_value( $user_id, self::BLOCKED_META, '' ) ) {
 			return true;
 		}
-		$user    = get_userdata( $user_id );
+		$login   = $this->user_login_fresh( $user_id );
 		$blocked = $this->read_value( 0, '', self::LEGACY_BLOCK_OPTION );
-		return $user && is_array( $blocked ) && in_array( $user->user_login, $blocked, true );
+		return '' !== $login && is_array( $blocked ) && in_array( $login, $blocked, true );
+	}
+
+	/**
+	 * Authoritative user_login inside critical sections without modifying user caches.
+	 *
+	 * @param int $user_id User ID.
+	 * @return string
+	 */
+	private function user_login_fresh( $user_id ) {
+		global $wpdb;
+		$values = $this->database_values( $wpdb->prepare( 'SELECT user_login FROM %i WHERE ID = %d', $wpdb->users, $user_id ) );
+		return $values ? (string) $values[0] : '';
 	}
 
 	/**
@@ -1290,10 +1339,10 @@ final class Image_Store {
 		if ( null === $legacy && ! $logins ) {
 			return true;
 		}
-		$user   = get_userdata( $user_id );
+		$login  = $this->user_login_fresh( $user_id );
 		$legacy = is_array( $legacy ) ? $legacy : array();
-		if ( $user ) {
-			$legacy = array_values( array_diff( $legacy, array( $user->user_login ) ) );
+		if ( '' !== $login ) {
+			$legacy = array_values( array_diff( $legacy, array( $login ) ) );
 		}
 		return $this->write_value( 0, '', self::LEGACY_BLOCK_OPTION, array_values( array_unique( array_merge( $legacy, $logins ) ) ) );
 	}

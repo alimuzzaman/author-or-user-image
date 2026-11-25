@@ -15,6 +15,12 @@ if ( ! defined( 'WP_CLI' ) || ! WP_CLI || 'local' !== wp_get_environment_type() 
 
 require_once ABSPATH . 'wp-admin/includes/image.php';
 require_once ABSPATH . 'wp-admin/includes/user.php';
+if ( ! class_exists( 'WP_Screen' ) ) {
+	require_once ABSPATH . 'wp-admin/includes/class-wp-screen.php';
+}
+if ( ! function_exists( 'set_current_screen' ) ) {
+	require_once ABSPATH . 'wp-admin/includes/screen.php';
+}
 if ( is_multisite() ) {
 	require_once ABSPATH . 'wp-admin/includes/ms.php';
 }
@@ -259,6 +265,118 @@ try {
 	$admin->attach_profile_errors( $err_bag, true, $sub_obj );
 	$zmai_pa_expect( ! $store->is_blocked( $sub_id ) && ! $err_bag->has_errors(), 'admin unchecking block via Edit User unblocks user' );
 
+	// 3h. Network Admin and User Admin screen contexts are ignored safely.
+	$prev_screen = $GLOBALS['current_screen'] ?? null;
+	try {
+		wp_set_current_user( $admin_id );
+		$assign_avatar( $sub_id );
+		$before_ctx_att = $store->get_user_attachment_id( $sub_id );
+
+		foreach ( array( 'user-edit-network', 'profile-user' ) as $ctx_screen ) {
+			set_current_screen( $ctx_screen );
+			ob_start();
+			$admin->add_multipart_enctype();
+			$ctx_enctype = (string) ob_get_clean();
+
+			ob_start();
+			$admin->render_profile_section( $sub_obj );
+			$ctx_html = (string) ob_get_clean();
+
+			$_POST = array(
+				'zmai_profile_nonce'         => wp_create_nonce( 'zmai_profile_avatar_' . $sub_id ),
+				'zmai_profile_remove'        => '1',
+				'zmai_profile_block_present' => '1',
+				'zmai_profile_blocked'       => '1',
+			);
+			$admin->save_profile( $sub_id );
+			$ctx_bag = new WP_Error();
+			$admin->attach_profile_errors( $ctx_bag, true, $sub_obj );
+
+			$zmai_pa_expect(
+				'' === $ctx_enctype
+				&& '' === $ctx_html
+				&& $store->get_user_attachment_id( $sub_id ) === $before_ctx_att
+				&& ! $store->is_blocked( $sub_id )
+				&& ! $ctx_bag->has_errors(),
+				'Profile_Admin ignores ' . $ctx_screen . ' screen context without rendering or mutating'
+			);
+		}
+	} finally {
+		$GLOBALS['current_screen'] = $prev_screen;
+	}
+
+	// 3i. Admin block/unblock via save_profile ignores poisoned user_meta cache.
+	$blocked_key = Image_Store::user_meta_key( Image_Store::BLOCKED_META );
+	update_user_meta( $sub_id, $blocked_key, 1 );
+	get_user_meta( $sub_id );
+	$cached_meta = wp_cache_get( $sub_id, 'user_meta' );
+	if ( ! is_array( $cached_meta ) ) {
+		$cached_meta = array();
+	}
+	$cached_meta[ $blocked_key ] = array( '' );
+	wp_cache_set( $sub_id, $cached_meta, 'user_meta' );
+	wp_set_current_user( $admin_id );
+	$_POST = array(
+		'zmai_profile_nonce'         => wp_create_nonce( 'zmai_profile_avatar_' . $sub_id ),
+		'zmai_profile_block_present' => '1',
+	);
+	$admin->save_profile( $sub_id );
+	$zmai_pa_expect( ! $store->is_blocked_fresh( $sub_id ), 'Profile_Admin unblocks user despite poisoned user_meta cache' );
+
+	$assign_avatar( $sub_id );
+	get_user_meta( $sub_id );
+	$cached_meta = wp_cache_get( $sub_id, 'user_meta' );
+	if ( ! is_array( $cached_meta ) ) {
+		$cached_meta = array();
+	}
+	$cached_meta[ $blocked_key ] = array( '1' );
+	wp_cache_set( $sub_id, $cached_meta, 'user_meta' );
+	$_POST = array(
+		'zmai_profile_nonce'         => wp_create_nonce( 'zmai_profile_avatar_' . $sub_id ),
+		'zmai_profile_block_present' => '1',
+		'zmai_profile_blocked'       => '1',
+	);
+	$admin->save_profile( $sub_id );
+	wp_cache_delete( $sub_id, 'user_meta' );
+	$zmai_pa_expect( $store->is_blocked_fresh( $sub_id ) && 0 === $store->get_user_attachment_id( $sub_id ), 'Profile_Admin blocks user and deletes avatar despite poisoned user_meta cache' );
+	$store->set_blocked( $sub_id, false );
+
+	// 3j. Legacy-blocked user suppresses preview image and remove checkbox in render_profile_section.
+	$assign_avatar( $sub_id );
+	$previous_legacy_ban = get_option( Image_Store::LEGACY_BLOCK_OPTION, null );
+	update_option( Image_Store::LEGACY_BLOCK_OPTION, array( $sub_obj->user_login ), false );
+	try {
+		wp_set_current_user( $sub_id );
+		ob_start();
+		$admin->render_profile_section( $sub_obj );
+		$legacy_self_html = (string) ob_get_clean();
+
+		wp_set_current_user( $admin_id );
+		ob_start();
+		$admin->render_profile_section( $sub_obj );
+		$legacy_admin_html = (string) ob_get_clean();
+
+		$zmai_pa_expect(
+			false === strpos( $legacy_self_html, 'zmai-avatar-preview' )
+			&& false === strpos( $legacy_self_html, 'zmai_profile_remove' )
+			&& false !== strpos( $legacy_self_html, 'No local avatar is set.' )
+			&& false !== strpos( $legacy_self_html, 'Local avatar uploads are disabled for this account.' )
+			&& false === strpos( $legacy_admin_html, 'zmai-avatar-preview' )
+			&& false === strpos( $legacy_admin_html, 'zmai_profile_remove' )
+			&& false !== strpos( $legacy_admin_html, 'No local avatar is set.' )
+			&& false !== strpos( $legacy_admin_html, 'Local avatar uploads are disabled for this account.' ),
+			'render_profile_section suppresses avatar preview and remove checkbox for legacy-blocked users'
+		);
+	} finally {
+		if ( null === $previous_legacy_ban ) {
+			delete_option( Image_Store::LEGACY_BLOCK_OPTION );
+		} else {
+			update_option( Image_Store::LEGACY_BLOCK_OPTION, $previous_legacy_ban, false );
+		}
+		wp_set_current_user( $admin_id );
+		$store->delete_user_avatar( $sub_id );
+	}
+
 	// 4. Multisite non-member isolation even for super administrators.
 	if ( is_multisite() ) {
 		$sites = get_sites( array( 'fields' => 'ids', 'number' => 2 ) );
@@ -266,6 +384,7 @@ try {
 			$blog2        = (int) $sites[1];
 			$nonmember_id = $create_user( 'subscriber' );
 			$nm_obj       = get_userdata( $nonmember_id );
+			$admin_obj    = get_userdata( $admin_id );
 			switch_to_blog( $blog2 );
 			try {
 				wp_set_current_user( $admin_id );
@@ -284,6 +403,22 @@ try {
 				$zmai_pa_expect(
 					'' === $nm_html && in_array( 'zmai_forbidden', $nm_bag->get_error_codes(), true ) && ! $store->is_blocked( $nonmember_id ),
 					'multisite super admin cannot view or edit non-member user on another site via Profile_Admin'
+				);
+
+				ob_start();
+				$admin->render_profile_section( $admin_obj );
+				$self_nm_html = (string) ob_get_clean();
+
+				$_POST = array(
+					'zmai_profile_nonce'  => wp_create_nonce( 'zmai_profile_avatar_' . $admin_id ),
+					'zmai_profile_remove' => '1',
+				);
+				$admin->save_profile( $admin_id );
+				$self_nm_bag = new WP_Error();
+				$admin->attach_profile_errors( $self_nm_bag, true, $admin_obj );
+				$zmai_pa_expect(
+					'' === $self_nm_html && in_array( 'zmai_forbidden', $self_nm_bag->get_error_codes(), true ),
+					'multisite non-member super admin receives empty output and zmai_forbidden on self-save via Profile_Admin'
 				);
 			} finally {
 				restore_current_blog();

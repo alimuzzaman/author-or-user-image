@@ -59,7 +59,7 @@ final class Import_Admin {
 		$hook = add_users_page( __( 'Avatar Migration', 'author-or-user-image' ), __( 'Avatar Migration', 'author-or-user-image' ), 'manage_options', 'author-or-user-image-import', array( $this, 'render_page' ) );
 		add_action( 'load-' . $hook, array( $this, 'set_page_title' ) );
 		$job = $this->migration->import_status();
-		if ( is_wp_error( $job ) || ( $job && 'complete' !== $job['state'] ) || get_option( Migration::RELEASE_FAILED_OPTION ) ) {
+		if ( is_wp_error( $job ) || ( $job && 'complete' !== $job['state'] ) || $this->migration->has_release_failure() ) {
 			return;
 		}
 		if ( array() === ( new Import_Sources() )->detected_sources() ) {
@@ -198,7 +198,7 @@ final class Import_Admin {
 		if ( isset( $_GET['import_error'] ) ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Import stopped. Review the stored progress and restore missing files locally before retrying. Retained locks require operator reconciliation.', 'author-or-user-image' ) . '</p></div>';
 		}
-		if ( is_wp_error( $job ) || get_option( Migration::RELEASE_FAILED_OPTION ) ) {
+		if ( is_wp_error( $job ) || $this->migration->has_release_failure() ) {
 			echo '<div class="notice notice-error"><p>' . esc_html__( 'Import state is unavailable or needs recovery. Ask the administrator to reconcile its schema and retained locks. No import was started.', 'author-or-user-image' ) . '</p></div></div>';
 			return;
 		}

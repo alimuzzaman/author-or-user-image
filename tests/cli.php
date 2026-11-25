@@ -87,10 +87,18 @@ $previous_job     = get_option( Migration::IMPORT_JOB_OPTION, null );
 $previous_failed  = get_option( Migration::RELEASE_FAILED_OPTION, null );
 
 try {
-	// 1. Sources --all lists all 4 adapters.
+	// 1. Sources --all lists all 4 adapters; invalid --format fails non-zero.
 	$all_sources = $run_cli( array( 'zmai', 'import', 'sources', '--all', '--format=json' ) );
 	$all_decoded = json_decode( $all_sources['stdout'], true );
 	$zmai_cli_expect( 0 === $all_sources['code'] && is_array( $all_decoded ) && 4 === count( $all_decoded ), 'wp zmai import sources --all lists all 4 sources' );
+
+	$bad_src_fmt  = $run_cli( array( 'zmai', 'import', 'sources', '--format=bogus' ) );
+	$bad_stat_fmt = $run_cli( array( 'zmai', 'import', 'status', '--format=bogus' ) );
+	$bad_lock_fmt = $run_cli( array( 'zmai', 'locks', 'list', '--format=bogus' ) );
+	$zmai_cli_expect(
+		0 !== $bad_src_fmt['code'] && 0 !== $bad_stat_fmt['code'] && 0 !== $bad_lock_fmt['code'],
+		'CLI list/status commands fail non-zero for unsupported --format'
+	);
 
 	// 2. Create fixture subscriber with owned wp_user_avatars file and verify detection + run.
 	$created_user = wp_insert_user(
@@ -148,9 +156,17 @@ try {
 	$started = $migration->start_import( 'wp-user-avatars', wp_generate_uuid4(), (int) $status_job['revision'] );
 	$zmai_cli_expect( is_array( $started ) && 'running' === $started['state'], 'start new job for CLI pause/resume/finish transitions' );
 
+	$bad_finish = $run_cli( array( 'zmai', 'import', 'finish', '--format=json' ) );
+	$after_bad  = $migration->import_status();
+	$zmai_cli_expect( 0 !== $bad_finish['code'] && is_array( $after_bad ) && 'running' === $after_bad['state'], 'wp zmai import finish fails non-zero when job is running' );
+
 	$pause1 = $run_cli( array( 'zmai', 'import', 'pause', '--format=json' ) );
 	$p1_job = json_decode( $pause1['stdout'], true );
 	$zmai_cli_expect( 0 === $pause1['code'] && 'paused' === ( $p1_job['state'] ?? '' ), 'wp zmai import pause pauses running job' );
+
+	$bad_retry = $run_cli( array( 'zmai', 'import', 'retry', '--format=json' ) );
+	$after_rty = $migration->import_status();
+	$zmai_cli_expect( 0 !== $bad_retry['code'] && is_array( $after_rty ) && 'paused' === $after_rty['state'], 'wp zmai import retry fails non-zero when job is paused' );
 
 	$resume1 = $run_cli( array( 'zmai', 'import', 'resume', '--format=json' ) );
 	$r1_job  = json_decode( $resume1['stdout'], true );
@@ -160,6 +176,10 @@ try {
 	$fin1   = $run_cli( array( 'zmai', 'import', 'finish', '--format=json' ) );
 	$f1_job = json_decode( $fin1['stdout'], true );
 	$zmai_cli_expect( 0 === $pause2['code'] && 0 === $fin1['code'] && 'complete' === ( $f1_job['state'] ?? '' ), 'wp zmai import finish completes paused job' );
+
+	$bad_pause  = $run_cli( array( 'zmai', 'import', 'pause', '--format=json' ) );
+	$bad_resume = $run_cli( array( 'zmai', 'import', 'resume', '--format=json' ) );
+	$zmai_cli_expect( 0 !== $bad_pause['code'] && 0 !== $bad_resume['code'], 'wp zmai import pause and resume fail non-zero on completed job' );
 
 	// 4. Locks list and exact-token unlock checks.
 	$empty_locks = $run_cli( array( 'zmai', 'locks', 'list', '--format=json' ) );
@@ -198,6 +218,11 @@ try {
 		$held_locks['zmai_avatar_lock_migration'] = $mig_lock;
 	}
 	update_option( Migration::RELEASE_FAILED_OPTION, 1, false );
+	$locks_warn = $run_cli( array( 'zmai', 'locks', 'list', '--format=json' ) );
+	$zmai_cli_expect(
+		0 === $locks_warn['code'] && false !== strpos( $locks_warn['stderr'], 'zmai_migration_release_failed' ),
+		'wp zmai locks list reports zmai_migration_release_failed warning authoritatively'
+	);
 	$mig_unlock = $run_cli( array( 'zmai', 'locks', 'unlock', 'zmai_avatar_lock_migration', '--token=' . $mig_lock['token'], '--yes' ) );
 	wp_cache_delete( Migration::RELEASE_FAILED_OPTION, 'options' );
 	$zmai_cli_expect(

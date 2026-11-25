@@ -78,11 +78,11 @@ By default, yes. Any logged-in user who can read the site can upload an image fo
 
 Unchecking every role turns off self-service uploads. Existing avatars stay visible, and users can still remove their own. A user with several roles qualifies if any checked role matches. A deleted role stops matching, and a role created later with the same slug matches again. Roles created after you save the list are not included until you check them.
 
-An individual block still stops that user from uploading, whatever their role. Only administrators can change the default image or manage other users.
+An individual block still stops that user from uploading, whatever their role. Only administrators can change the default image or manage other users. On multisite, the Profile screen and REST API self-service endpoints always require membership on that site, while the **All users who can read** setting preserves WordPress's standard `read` capability rule on the dashboard and front-end form.
 
 = Is there an upload rate limit? =
 
-Each user can make five authorized self-upload attempts per minute and twenty per hour, shared between the dashboard and front-end form on the same site. Multisite counters are per site, so a member of several sites has a separate allowance on each. Failed image attempts count too. Removal, privacy erasure, administrator moderation, imports and site-default changes do not use this counter.
+Each user can make five authorized self-upload attempts per minute and twenty per hour, shared across the dashboard, Profile screen, front-end form, and REST API on the same site. Multisite counters are per site, so a member of several sites has a separate allowance on each. Failed image attempts count too. Removal, privacy erasure, administrator moderation, imports and site-default changes do not use this counter.
 
 = How do I add an upload form to a page? =
 
@@ -130,7 +130,7 @@ Trusted PHP code can opt out for an individual operation with the `zmai_strip_im
 
 = How do I import avatars from another plugin? =
 
-Open **Users > Avatar Management > Avatar Migration** and use the import action for the detected source plugin. The tab is always available. A separate **Users > Avatar Migration** menu appears when a supported plugin or saved avatar data is detected, or an unfinished import needs attention. No source selector is needed. Only an administrator can run an import. Competitor imports start only from this screen. The automatic migration of this plugin's older data remains separate. The import runs in pages and reports counts, errors, and completion. Stop pauses the import, and Resume continues it. Closing the page stops further batches, so reopen the page and choose Continue or Resume.
+Open **Users > Avatar Management > Avatar Migration** and use the import action for the detected source plugin. The tab is always available. A separate **Users > Avatar Migration** menu appears when a supported plugin or saved avatar data is detected, or an unfinished import needs attention. No source selector is needed. Only an administrator can run an import. Competitor imports start only from this screen or via WP-CLI (`wp zmai import`). The automatic migration of this plugin's older data remains separate. The import runs in pages and reports counts, errors, and completion. Stop pauses the import, and Resume continues it. Closing the page stops further batches, so reopen the page and choose Continue or Resume.
 
 A user who already has an imported avatar is skipped by later runs, so the first source imported for that user wins. A user who removes an avatar stays without one, and removal blocks any later re-import for that user.
 

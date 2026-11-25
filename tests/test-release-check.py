@@ -100,7 +100,7 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertTrue(required.issubset(RELEASE_CHECK.PRODUCTION_FILES))
         self.assertIn("includes/class-image-metadata.php", RELEASE_CHECK.PRODUCTION_FILES)
 
-    def test_zip_contains_only_the_twenty_four_production_files(self) -> None:
+    def test_zip_contains_only_the_twenty_seven_production_files(self) -> None:
         for directory in (".github", "docs", "tests", "tools", ".wordpress-org"):
             dev_file = self.project / directory / "release-note.txt"
             dev_file.parent.mkdir(parents=True, exist_ok=True)

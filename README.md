@@ -10,7 +10,7 @@ Use a local avatar or profile picture for registered WordPress users, with a sit
 - Front-end **Avatar upload** block (`author-or-user-image/avatar-upload`) and `[author_or_user_image_upload]` shortcode with configurable display and label attributes (`showPreview`, `previewSize`, `alignment`, `uploadLabel`, `removeLabel`, `loginLabel`).
 - Per-site upload eligibility policy allowing all users who can read or selected roles only, plus per-user block controls and rate limits.
 - Center-square `zmai-avatar` renditions stored in the WordPress Media Library, with descriptive metadata stripped by default (retaining ICC color data).
-- Site-scoped REST API under `/wp-json/author-or-user-image/v1/` with capability, policy, rate-limit, and multisite membership enforcement.
+- Site-scoped REST API under `/wp-json/author-or-user-image/v1/` with capability, policy, rate-limit, and multisite membership enforcement (on multisite, REST self-service endpoints and WordPress Profile / Edit User screens require current-site membership, while the default "all users who can read" setting retains WordPress's `read` capability behavior on the dashboard page and front-end form).
 - Importer for local avatars from Simple Local Avatars, One User Avatar / WP User Avatar, WP User Avatars, and User Profile Picture / Metronet in admin and via WP-CLI (`wp zmai import`).
 - Read-only lifecycle lock diagnostics under **Users > Avatar Management > Settings** and exact-token WP-CLI recovery commands (`wp zmai locks`).
 - Personal-data export/erasure integration, multisite-safe cleanup on account deletion, and optional opted-in uninstall cleanup.

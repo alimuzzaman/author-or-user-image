@@ -10,6 +10,14 @@
 	var SelectControl = components.SelectControl;
 	var TextControl = components.TextControl;
 
+	function cleanLabel(value, maxLen) {
+		if (typeof value !== 'string') {
+			return '';
+		}
+		var cleaned = value.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+		return cleaned ? cleaned.slice(0, maxLen) : '';
+	}
+
 	blocks.registerBlockType('author-or-user-image/avatar-upload', {
 		apiVersion: 3,
 		title: i18n.__('Avatar upload', 'author-or-user-image'),
@@ -29,25 +37,29 @@
 			var attrs = props.attributes || {};
 			var showPreview = attrs.showPreview !== false;
 			var previewSize = typeof attrs.previewSize === 'number' ? attrs.previewSize : 0;
-			var alignment = typeof attrs.alignment === 'string' ? attrs.alignment : '';
+			var effectivePreviewSize = previewSize > 0 ? Math.min(512, Math.max(32, previewSize)) : 0;
+			var rawAlignment = typeof attrs.alignment === 'string' ? attrs.alignment : '';
+			var alignment = rawAlignment === 'left' || rawAlignment === 'center' || rawAlignment === 'right' ? rawAlignment : '';
 			var uploadLabel = typeof attrs.uploadLabel === 'string' ? attrs.uploadLabel : '';
 			var removeLabel = typeof attrs.removeLabel === 'string' ? attrs.removeLabel : '';
 			var loginLabel = typeof attrs.loginLabel === 'string' ? attrs.loginLabel : '';
+			var summaryUpload = cleanLabel(uploadLabel, 80);
+			var summaryRemove = cleanLabel(removeLabel, 80);
 
 			var summary = [];
 			if (!showPreview) {
 				summary.push(i18n.__('Preview hidden', 'author-or-user-image'));
-			} else if (previewSize > 0) {
-				summary.push(i18n.__('Preview size:', 'author-or-user-image') + ' ' + previewSize + 'px');
+			} else if (effectivePreviewSize > 0) {
+				summary.push(i18n.__('Preview size:', 'author-or-user-image') + ' ' + effectivePreviewSize + 'px');
 			}
 			if (alignment) {
 				summary.push(i18n.__('Alignment:', 'author-or-user-image') + ' ' + alignment);
 			}
-			if (uploadLabel) {
-				summary.push(i18n.__('Upload label:', 'author-or-user-image') + ' ' + uploadLabel);
+			if (summaryUpload) {
+				summary.push(i18n.__('Upload label:', 'author-or-user-image') + ' ' + summaryUpload);
 			}
-			if (removeLabel) {
-				summary.push(i18n.__('Remove label:', 'author-or-user-image') + ' ' + removeLabel);
+			if (summaryRemove) {
+				summary.push(i18n.__('Remove label:', 'author-or-user-image') + ' ' + summaryRemove);
 			}
 
 			var className = 'zmai-front-end' + (alignment ? ' zmai-align-' + alignment : '');
@@ -70,12 +82,20 @@
 						}),
 						el(RangeControl, {
 							label: i18n.__('Preview size (px, 0 = site default)', 'author-or-user-image'),
-							value: previewSize,
+							value: effectivePreviewSize,
 							min: 0,
 							max: 512,
 							step: 8,
 							onChange: function (value) {
-								props.setAttributes({ previewSize: typeof value === 'number' ? value : 0 });
+								var next = typeof value === 'number' && !isNaN(value) ? Math.round(value) : 0;
+								if (next > 0 && next < 32) {
+									next = effectivePreviewSize >= 32 ? 0 : 32;
+								} else if (next < 0) {
+									next = 0;
+								} else if (next > 512) {
+									next = 512;
+								}
+								props.setAttributes({ previewSize: next });
 							}
 						}),
 						el(SelectControl, {
@@ -94,6 +114,7 @@
 						el(TextControl, {
 							label: i18n.__('Upload button label', 'author-or-user-image'),
 							placeholder: i18n.__('Upload image', 'author-or-user-image'),
+							maxLength: 80,
 							value: uploadLabel,
 							onChange: function (value) {
 								props.setAttributes({ uploadLabel: value });
@@ -102,6 +123,7 @@
 						el(TextControl, {
 							label: i18n.__('Remove button label', 'author-or-user-image'),
 							placeholder: i18n.__('Remove image', 'author-or-user-image'),
+							maxLength: 80,
 							value: removeLabel,
 							onChange: function (value) {
 								props.setAttributes({ removeLabel: value });
@@ -110,6 +132,7 @@
 						el(TextControl, {
 							label: i18n.__('Logged-out link text', 'author-or-user-image'),
 							placeholder: i18n.__('Log in to manage your avatar.', 'author-or-user-image'),
+							maxLength: 120,
 							value: loginLabel,
 							onChange: function (value) {
 								props.setAttributes({ loginLabel: value });

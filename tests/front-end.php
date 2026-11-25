@@ -514,6 +514,25 @@ function zmai_fe_render_contract() {
 	zmai_fe_expect( zmai_fe_has_text( $blocked ), 'blocked subscriber gets a visible reason' );
 	$store->set_blocked( $user, false );
 
+	list( $legacy_blocked_user ) = zmai_fe_avatar_user( 'legacy-block' );
+	$legacy_user_obj            = get_userdata( $legacy_blocked_user );
+	$old_ban                    = get_option( Image_Store::LEGACY_BLOCK_OPTION, null );
+	update_option( Image_Store::LEGACY_BLOCK_OPTION, array( $legacy_user_obj->user_login ), false );
+	wp_set_current_user( $legacy_blocked_user );
+	$legacy_blocked_html = zmai_fe_render( array() );
+	$legacy_blocked_doc  = zmai_fe_dom( $legacy_blocked_html );
+	zmai_fe_expect(
+		0 === zmai_fe_count( $legacy_blocked_doc, '//img[contains(@class,"zmai-avatar-preview")]' )
+		&& 0 === zmai_fe_count( $legacy_blocked_doc, '//form[contains(@class,"zmai-remove-form")]' )
+		&& false === strpos( $legacy_blocked_html, 'type="file"' ),
+		'legacy-blocked user sees neither avatar preview nor remove/upload forms in Front_End'
+	);
+	if ( null === $old_ban ) {
+		delete_option( Image_Store::LEGACY_BLOCK_OPTION );
+	} else {
+		update_option( Image_Store::LEGACY_BLOCK_OPTION, $old_ban, false );
+	}
+
 	wp_set_current_user( $user );
 	$plain   = zmai_fe_render( array() );
 	$hostile = zmai_fe_render(

@@ -129,6 +129,35 @@ try {
 	$clean_html = (string) ob_get_clean();
 	$zmai_p1_expect( false !== strpos( $clean_html, 'No active or retained avatar locks were found on this site.' ), 'settings screen confirms clean state when no locks exist' );
 
+	// 2b. Settings diagnostics reads RELEASE_FAILED_OPTION authoritatively despite poisoned option caches.
+	update_option( Migration::RELEASE_FAILED_OPTION, 1, false );
+	wp_cache_set( Migration::RELEASE_FAILED_OPTION, 0, 'options' );
+	$alloptions_diag = wp_cache_get( 'alloptions', 'options' );
+	if ( ! is_array( $alloptions_diag ) ) {
+		$alloptions_diag = array();
+	}
+	$alloptions_diag[ Migration::RELEASE_FAILED_OPTION ] = 0;
+	wp_cache_set( 'alloptions', $alloptions_diag, 'options' );
+	ob_start();
+	$admin->render_management_page();
+	$poisoned_true_html = (string) ob_get_clean();
+	$zmai_p1_expect( false !== strpos( $poisoned_true_html, 'legacy migration lock release previously failed' ), 'settings diagnostics detects DB release_failed flag despite poisoned options cache' );
+
+	delete_option( Migration::RELEASE_FAILED_OPTION );
+	wp_cache_set( Migration::RELEASE_FAILED_OPTION, 1, 'options' );
+	$alloptions_diag[ Migration::RELEASE_FAILED_OPTION ] = 1;
+	wp_cache_set( 'alloptions', $alloptions_diag, 'options' );
+	ob_start();
+	$admin->render_management_page();
+	$poisoned_false_html = (string) ob_get_clean();
+	$zmai_p1_expect(
+		false !== strpos( $poisoned_false_html, 'No active or retained avatar locks were found on this site.' )
+		&& false === strpos( $poisoned_false_html, 'legacy migration lock release previously failed' ),
+		'settings diagnostics ignores poisoned release_failed cache when DB row is absent'
+	);
+	wp_cache_delete( Migration::RELEASE_FAILED_OPTION, 'options' );
+	wp_cache_delete( 'alloptions', 'options' );
+
 	// 3. Poisoned persistent object-cache resilience checks.
 	// 3a. Upload_Policy::can_upload_fresh() must read DB policy, not poisoned option/alloptions cache.
 	$saved_policy = $policy->save_policy(
@@ -152,20 +181,47 @@ try {
 	wp_cache_set( 'alloptions', $alloptions, 'options' );
 	$zmai_p1_expect( false === $policy->can_upload_fresh( $test_user_id ), 'can_upload_fresh denies when DB policy denies despite poisoned options/alloptions cache' );
 
-	// 3b. Image_Store::is_blocked_fresh() must read DB usermeta, not poisoned user_meta cache.
+	// 3b. Image_Store::is_blocked_fresh() must read DB usermeta and user_login, not poisoned caches.
 	$blocked_key = Image_Store::user_meta_key( Image_Store::BLOCKED_META );
 	update_user_meta( $test_user_id, $blocked_key, 1 );
 	wp_cache_set( $test_user_id, array( $blocked_key => array( '' ) ), 'user_meta' );
 	$zmai_p1_expect( true === $store->is_blocked_fresh( $test_user_id ), 'is_blocked_fresh detects DB block despite poisoned user_meta cache' );
 	delete_user_meta( $test_user_id, $blocked_key );
 
-	// 3c. Migration::import_status() must read DB option, not poisoned options cache.
+	$test_user_obj = get_userdata( $test_user_id );
+	$previous_ban  = get_option( Image_Store::LEGACY_BLOCK_OPTION, null );
+	update_option( Image_Store::LEGACY_BLOCK_OPTION, array( $test_user_obj->user_login ), false );
+	$cached_user               = wp_cache_get( $test_user_id, 'users' );
+	$poisoned_user             = is_object( $cached_user ) ? clone $cached_user : new stdClass();
+	$poisoned_user->ID         = $test_user_id;
+	$poisoned_user->user_login = 'poisoned-wrong-login';
+	wp_cache_set( $test_user_id, $poisoned_user, 'users' );
+	$zmai_p1_expect( true === $store->is_blocked_fresh( $test_user_id ), 'is_blocked_fresh detects legacy login block despite poisoned users cache' );
+	wp_cache_delete( $test_user_id, 'users' );
+	if ( null === $previous_ban ) {
+		delete_option( Image_Store::LEGACY_BLOCK_OPTION );
+	} else {
+		update_option( Image_Store::LEGACY_BLOCK_OPTION, $previous_ban, false );
+	}
+
+	// 3c. Migration::import_status() and has_release_failure() must read DB options, not poisoned options cache.
 	delete_option( Migration::IMPORT_JOB_OPTION );
 	$job = $migration->start_import( 'wp-user-avatars', wp_generate_uuid4(), 0 );
 	$zmai_p1_expect( is_array( $job ) && 'running' === $job['state'], 'start import job for cache-resilience test' );
 	wp_cache_set( Migration::IMPORT_JOB_OPTION, 'corrupt-cached-job', 'options' );
 	$status = $migration->import_status();
 	$zmai_p1_expect( is_array( $status ) && $status['id'] === $job['id'] && 'running' === $status['state'], 'import_status reads authoritative DB job despite poisoned options cache' );
+
+	update_option( Migration::RELEASE_FAILED_OPTION, 1, false );
+	wp_cache_set( Migration::RELEASE_FAILED_OPTION, 0, 'options' );
+	$alloptions_mig = wp_cache_get( 'alloptions', 'options' );
+	if ( ! is_array( $alloptions_mig ) ) {
+		$alloptions_mig = array();
+	}
+	$alloptions_mig[ Migration::RELEASE_FAILED_OPTION ] = 0;
+	wp_cache_set( 'alloptions', $alloptions_mig, 'options' );
+	$zmai_p1_expect( true === $migration->has_release_failure(), 'Migration::has_release_failure reads DB state despite poisoned options/alloptions cache' );
+	delete_option( Migration::RELEASE_FAILED_OPTION );
 } finally {
 	$_GET = $previous_get;
 	wp_set_current_user( $previous_user_id );
@@ -176,6 +232,7 @@ try {
 	wp_cache_delete( 'alloptions', 'options' );
 	wp_cache_delete( Upload_Policy::OPTION, 'options' );
 	wp_cache_delete( Migration::IMPORT_JOB_OPTION, 'options' );
+	wp_cache_delete( Migration::RELEASE_FAILED_OPTION, 'options' );
 
 	if ( null === $previous_policy ) {
 		delete_option( Upload_Policy::OPTION );

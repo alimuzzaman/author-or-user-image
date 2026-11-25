@@ -88,6 +88,9 @@ final class CLI {
 	public function import_sources( $args, $assoc_args ) {
 		$show_all = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'all', false );
 		$format   = (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' );
+		if ( ! in_array( $format, array( 'table', 'json', 'csv', 'yaml' ), true ) ) {
+			\WP_CLI::error( 'Format must be table, json, csv, or yaml.' );
+		}
 
 		$detected = ( new Import_Sources( $this->store ) )->detected_sources();
 		if ( is_wp_error( $detected ) ) {
@@ -131,7 +134,10 @@ final class CLI {
 	 */
 	public function import_status( $args, $assoc_args ) {
 		$format = (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' );
-		$job    = $this->migration->import_status();
+		if ( ! in_array( $format, array( 'table', 'json', 'yaml' ), true ) ) {
+			\WP_CLI::error( 'Format must be table, json, or yaml.' );
+		}
+		$job = $this->migration->import_status();
 		if ( is_wp_error( $job ) ) {
 			\WP_CLI::error( $job->get_error_message() );
 		}
@@ -276,6 +282,8 @@ final class CLI {
 			\WP_CLI::error( 'Import stopped in recovery_required state. Reconcile retained locks before continuing.' );
 		} elseif ( 'paused_with_failures' === $job['state'] ) {
 			\WP_CLI::warning( 'Import paused with temporary failures. Run "wp zmai import retry" or "wp zmai import finish".' );
+		} elseif ( 'paused' === $job['state'] ) {
+			\WP_CLI::warning( 'Import was paused. Run "wp zmai import resume" or "wp zmai import finish".' );
 		} elseif ( $max_batches > 0 ) {
 			\WP_CLI::warning( 'Stopped after reaching --max-batches limit; job remains running.' );
 		} else {
@@ -365,13 +373,22 @@ final class CLI {
 	public function locks_list( $args, $assoc_args ) {
 		$show_tokens = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'show-tokens', false );
 		$format      = (string) \WP_CLI\Utils\get_flag_value( $assoc_args, 'format', 'table' );
+		if ( ! in_array( $format, array( 'table', 'json', 'csv', 'yaml' ), true ) ) {
+			\WP_CLI::error( 'Format must be table, json, csv, or yaml.' );
+		}
 
 		$locks = $this->store->get_lock()->inspect_locks();
 		if ( is_wp_error( $locks ) ) {
 			\WP_CLI::error( $locks->get_error_message() );
 		}
 
-		if ( get_option( Migration::RELEASE_FAILED_OPTION ) ) {
+		try {
+			$release_failed = (bool) $this->store->read_value( 0, '', Migration::RELEASE_FAILED_OPTION );
+		} catch ( \Throwable $error ) {
+			\WP_CLI::error( $this->store->storage_error()->get_error_message() );
+		}
+
+		if ( $release_failed ) {
 			\WP_CLI::warning( 'Option zmai_migration_release_failed is set on this site.' );
 		}
 
@@ -467,10 +484,45 @@ final class CLI {
 			\WP_CLI::error( 'No import job exists on this site.' );
 		}
 
+		$allowed_states = array(
+			'pause'  => array( 'running' ),
+			'resume' => array( 'paused' ),
+			'retry'  => array( 'paused_with_failures' ),
+			'finish' => array( 'paused', 'paused_with_failures' ),
+		);
+		$expected_state = array(
+			'pause'  => 'paused',
+			'resume' => 'running',
+			'retry'  => 'running',
+			'finish' => 'complete',
+		);
+
+		if ( ! isset( $allowed_states[ $operation ], $expected_state[ $operation ] ) || ! in_array( $job['state'], $allowed_states[ $operation ], true ) ) {
+			\WP_CLI::error(
+				sprintf(
+					'Cannot %1$s job %2$s while it is in state "%3$s".',
+					$operation,
+					$job['id'],
+					$job['state']
+				)
+			);
+		}
+
 		$method = $operation . '_import';
 		$result = $this->migration->$method( $job['id'], $job['revision'] );
 		if ( is_wp_error( $result ) ) {
 			\WP_CLI::error( $result->get_error_message() );
+		}
+		if ( ! is_array( $result ) || (int) $result['revision'] !== (int) $job['revision'] + 1 || $result['state'] !== $expected_state[ $operation ] ) {
+			\WP_CLI::error(
+				sprintf(
+					'Could not %1$s job %2$s; current state is "%3$s" (revision %4$d).',
+					$operation,
+					$job['id'],
+					is_array( $result ) && isset( $result['state'] ) ? (string) $result['state'] : 'unknown',
+					is_array( $result ) && isset( $result['revision'] ) ? (int) $result['revision'] : 0
+				)
+			);
 		}
 
 		if ( 'json' === $format ) {

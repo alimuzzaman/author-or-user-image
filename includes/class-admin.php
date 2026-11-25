@@ -524,8 +524,12 @@ final class Admin {
 			$this->redirect_manage( 'nothing-selected', $return_tab );
 		}
 
+		$blog_id = get_current_blog_id();
 		foreach ( $user_ids as $user_id ) {
-			if ( ! get_userdata( $user_id ) ) {
+			if ( ! get_userdata( $user_id ) || ( is_multisite() && ! is_user_member_of_blog( $user_id, $blog_id ) ) ) {
+				continue;
+			}
+			if ( ! current_user_can( 'edit_user', $user_id ) ) {
 				continue;
 			}
 			if ( 'delete' === $action ) {
@@ -587,8 +591,14 @@ final class Admin {
 	 */
 	private function render_lock_diagnostics() {
 		$locks          = $this->store->get_lock()->inspect_locks();
-		$release_failed = (bool) get_option( Migration::RELEASE_FAILED_OPTION );
-		$scope_labels   = array(
+		$release_failed = false;
+		$status_error   = is_wp_error( $locks );
+		try {
+			$release_failed = (bool) $this->store->read_value( 0, '', Migration::RELEASE_FAILED_OPTION );
+		} catch ( \Throwable $error ) {
+			$status_error = true;
+		}
+		$scope_labels = array(
 			'migration' => __( 'Migration coordinator', 'author-or-user-image' ),
 			'blocks'    => __( 'Block list', 'author-or-user-image' ),
 			'default'   => __( 'Default avatar', 'author-or-user-image' ),
@@ -598,7 +608,7 @@ final class Admin {
 		?>
 		<div class="zmai-card">
 			<h2><?php esc_html_e( 'Lifecycle lock status', 'author-or-user-image' ); ?></h2>
-			<?php if ( is_wp_error( $locks ) ) : ?>
+			<?php if ( $status_error ) : ?>
 				<p class="description"><?php esc_html_e( 'Could not read lifecycle lock status from the database.', 'author-or-user-image' ); ?></p>
 			<?php elseif ( ! $locks && ! $release_failed ) : ?>
 				<p class="description"><?php esc_html_e( 'No active or retained avatar locks were found on this site.', 'author-or-user-image' ); ?></p>

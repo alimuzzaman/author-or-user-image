@@ -62,7 +62,7 @@ final class Profile_Admin {
 	 * @return void
 	 */
 	public function enqueue_assets( $hook_suffix ) {
-		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php' ), true ) ) {
+		if ( ! $this->is_site_admin_context() || ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php' ), true ) ) {
 			return;
 		}
 		wp_enqueue_style( 'zmai-admin', ZMAI_URL . 'assets/css/admin.css', array(), ZMAI_VERSION );
@@ -74,6 +74,9 @@ final class Profile_Admin {
 	 * @return void
 	 */
 	public function add_multipart_enctype() {
+		if ( ! $this->is_site_admin_context() ) {
+			return;
+		}
 		echo ' enctype="multipart/form-data"';
 	}
 
@@ -84,16 +87,20 @@ final class Profile_Admin {
 	 * @return void
 	 */
 	public function render_profile_section( WP_User $user ) {
+		if ( ! $this->is_site_admin_context() ) {
+			return;
+		}
 		$target_id      = (int) $user->ID;
 		$is_self        = get_current_user_id() === $target_id;
+		$can_self_edit  = $is_self && $this->can_self_edit( $target_id );
 		$can_admin_edit = $this->can_admin_edit_target( $target_id );
-		if ( ( ! $is_self && ! $can_admin_edit ) || ( $is_self && ! current_user_can( 'read' ) ) ) {
+		if ( ! $can_self_edit && ! $can_admin_edit ) {
 			return;
 		}
 
 		$size       = $this->store->get_size();
 		$blocked    = $this->store->is_blocked( $target_id );
-		$url        = $this->store->get_url( $target_id, $size, false );
+		$url        = $blocked ? '' : $this->store->get_url( $target_id, $size, false );
 		$can_upload = ! $blocked && ( $is_self ? $this->policy->can_upload( $target_id ) : $can_admin_edit );
 		?>
 		<h2><?php esc_html_e( 'Author or User Image', 'author-or-user-image' ); ?></h2>
@@ -153,6 +160,9 @@ final class Profile_Admin {
 	 * @return void
 	 */
 	public function save_profile( $user_id ) {
+		if ( ! $this->is_site_admin_context() ) {
+			return;
+		}
 		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] ) {
 			return;
 		}
@@ -173,20 +183,19 @@ final class Profile_Admin {
 		}
 
 		$is_self        = get_current_user_id() === $target_id;
+		$can_self_edit  = $is_self && $this->can_self_edit( $target_id );
 		$can_admin_edit = $this->can_admin_edit_target( $target_id );
-		if ( ( ! $is_self && ! $can_admin_edit ) || ( $is_self && ! current_user_can( 'read' ) ) ) {
+		if ( ! $can_self_edit && ! $can_admin_edit ) {
 			$this->record_error( $target_id, 'zmai_forbidden', __( 'You are not allowed to do that.', 'author-or-user-image' ) );
 			return;
 		}
 
 		if ( ! $is_self && $can_admin_edit && isset( $_POST['zmai_profile_block_present'] ) ) {
-			$want_block = ! empty( $_POST['zmai_profile_blocked'] );
-			if ( $want_block !== $this->store->is_blocked( $target_id ) ) {
-				$block_result = $this->store->set_blocked( $target_id, $want_block );
-				if ( is_wp_error( $block_result ) ) {
-					$this->record_wp_error( $target_id, $block_result );
-					return;
-				}
+			$want_block   = ! empty( $_POST['zmai_profile_blocked'] );
+			$block_result = $this->store->set_blocked( $target_id, $want_block );
+			if ( is_wp_error( $block_result ) ) {
+				$this->record_wp_error( $target_id, $block_result );
+				return;
 			}
 			if ( $want_block ) {
 				return;
@@ -263,6 +272,28 @@ final class Profile_Admin {
 	private function record_wp_error( $user_id, WP_Error $error ) {
 		$code = $error->get_error_code();
 		$this->record_error( $user_id, $code, Admin::upload_error_message( $code ) );
+	}
+
+	/**
+	 * Ensure profile hooks operate only in a site-scoped admin screen context.
+	 *
+	 * @return bool
+	 */
+	private function is_site_admin_context() {
+		return ! is_network_admin() && ! is_user_admin();
+	}
+
+	/**
+	 * Check whether the current user can self-manage their avatar on this site.
+	 *
+	 * @param int $target_id Target user ID.
+	 * @return bool
+	 */
+	private function can_self_edit( $target_id ) {
+		if ( ! current_user_can( 'read' ) ) {
+			return false;
+		}
+		return ! is_multisite() || is_user_member_of_blog( $target_id, get_current_blog_id() );
 	}
 
 	/**

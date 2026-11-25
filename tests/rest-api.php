@@ -221,11 +221,36 @@ try {
 	$bad_role = $call( 'GET', '/avatars', array( 'role' => 'nonexistent_role_slug' ) );
 	$zmai_rest_expect( 400 === $bad_role->get_status(), 'invalid role query returns 400' );
 
+	$punct_role = $call( 'GET', '/avatars', array( 'role' => '!!!' ) );
+	$zmai_rest_expect( 400 === $punct_role->get_status(), 'non-alphanumeric role query returns 400 instead of unfiltered list' );
+
 	$missing_user = $call( 'GET', '/avatars/9999999' );
 	$zmai_rest_expect( 404 === $missing_user->get_status(), 'admin querying nonexistent user returns 404' );
 
+	foreach ( array(
+		'missing' => array(),
+		'zero'    => array( 'user_id' => 0 ),
+		'neg'     => array( 'user_id' => -5 ),
+		'string'  => array( 'user_id' => 'abc' ),
+	) as $label => $params ) {
+		$bad_blk = $call( 'POST', '/blocked', $params );
+		$zmai_rest_expect( 400 === $bad_blk->get_status(), 'POST /blocked rejects invalid user_id (' . $label . ') with 400' );
+	}
+
 	$block_res = $call( 'POST', '/blocked', array( 'user_id' => $sub_id ) );
 	$zmai_rest_expect( 200 === $block_res->get_status() && $store->is_blocked( $sub_id ) && 0 === $store->get_user_attachment_id( $sub_id ), 'POST /blocked blocks user and removes avatar' );
+
+	$blocked_avatar = $call( 'GET', '/avatars/' . $sub_id );
+	$blocked_data   = $blocked_avatar->get_data();
+	$zmai_rest_expect(
+		200 === $blocked_avatar->get_status()
+		&& true === $blocked_data['blocked']
+		&& 0 === $blocked_data['attachment_id']
+		&& '' === $blocked_data['url']
+		&& '' === $blocked_data['fallback_url']
+		&& false === $blocked_data['has_local_avatar'],
+		'GET /avatars/{id} omits site default fallback_url and local avatar URL when user is blocked'
+	);
 
 	$blocked_list = $call( 'GET', '/blocked' );
 	$blocked_ids  = array_column( $blocked_list->get_data(), 'user_id' );
@@ -333,6 +358,49 @@ try {
 		'REST map_error() maps upload_error to HTTP 400 with fixed message and no internal path leakage'
 	);
 
+	// 3c. Oversized request exceeding post_max_size (empty files/body with large Content-Length) returns 400 zmai_upload_size.
+	$post_max = wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) );
+	if ( $post_max > 0 ) {
+		$oversize_req = new WP_REST_Request( 'POST', '/' . REST_API::REST_NAMESPACE . '/avatars/' . $sub_id );
+		$oversize_req->set_header( 'content-length', (string) ( $post_max + 1024 ) );
+		$oversize_res  = rest_do_request( $oversize_req );
+		$oversize_data = $oversize_res->get_data();
+		$zmai_rest_expect(
+			400 === $oversize_res->get_status() && 'zmai_upload_size' === ( $oversize_data['code'] ?? '' ),
+			'POST /avatars/{id} with oversized Content-Length and empty body returns 400 zmai_upload_size'
+		);
+	}
+
+	// 3d. Path user_id cannot be shadowed by query/body user_id, and associative bulk arrays are rejected.
+	$shadow_req = new WP_REST_Request( 'GET', '/' . REST_API::REST_NAMESPACE . '/avatars/' . $sub_id );
+	$shadow_req->set_query_params( array( 'user_id' => 'abc' ) );
+	$shadow_res = rest_do_request( $shadow_req );
+	$zmai_rest_expect( 400 === $shadow_res->get_status(), 'GET /avatars/{id}?user_id=abc returns 400 instead of 404' );
+
+	$call( 'POST', '/blocked', array( 'user_id' => $sub_id ) );
+	$call( 'POST', '/blocked', array( 'user_id' => $other_id ) );
+	$unblock_shadow = new WP_REST_Request( 'DELETE', '/' . REST_API::REST_NAMESPACE . '/blocked/' . $sub_id );
+	$unblock_shadow->set_query_params( array( 'user_id' => $other_id ) );
+	$unblock_shadow->set_body_params( array( 'user_id' => $other_id ) );
+	$unblock_shadow_res = rest_do_request( $unblock_shadow );
+	$zmai_rest_expect(
+		200 === $unblock_shadow_res->get_status()
+		&& ! $store->is_blocked_fresh( $sub_id )
+		&& $store->is_blocked_fresh( $other_id ),
+		'DELETE /blocked/{id} ignores shadowed query/body user_id and unblocks only path user'
+	);
+	$call( 'DELETE', '/blocked/' . $other_id );
+
+	$assoc_bulk = $call(
+		'POST',
+		'/bulk',
+		array(
+			'action'   => 'block',
+			'user_ids' => array( 'a' => $sub_id ),
+		)
+	);
+	$zmai_rest_expect( 400 === $assoc_bulk->get_status(), 'POST /bulk rejects associative user_ids array with 400' );
+
 	// 4. Multisite non-member isolation for a site-only administrator (not super admin).
 	if ( is_multisite() ) {
 		$sites = get_sites( array( 'fields' => 'ids', 'number' => 2 ) );
@@ -345,11 +413,11 @@ try {
 			add_user_to_blog( $blog2, $site_admin_id, 'administrator' );
 			wp_set_current_user( $site_admin_id );
 
-			$nm_get   = $call( 'GET', '/avatars/' . $nonmember_id )->get_status();
-			$nm_post  = $call( 'POST', '/avatars/' . $nonmember_id )->get_status();
-			$nm_del   = $call( 'DELETE', '/avatars/' . $nonmember_id )->get_status();
-			$nm_blk   = $call( 'POST', '/blocked', array( 'user_id' => $nonmember_id ) )->get_status();
-			$nm_unblk = $call( 'DELETE', '/blocked/' . $nonmember_id )->get_status();
+			$nm_get   = $call( 'GET', '/avatars/' . $nonmember_id );
+			$nm_post  = $call( 'POST', '/avatars/' . $nonmember_id );
+			$nm_del   = $call( 'DELETE', '/avatars/' . $nonmember_id );
+			$nm_blk   = $call( 'POST', '/blocked', array( 'user_id' => $nonmember_id ) );
+			$nm_unblk = $call( 'DELETE', '/blocked/' . $nonmember_id );
 			$nm_bulk  = $call(
 				'POST',
 				'/bulk',
@@ -361,15 +429,15 @@ try {
 			$bulk_failed = $nm_bulk->get_data()['failed'][0]['code'] ?? '';
 
 			$zmai_rest_expect(
-				in_array( $nm_get, array( 403, 404 ), true )
-				&& in_array( $nm_post, array( 403, 404 ), true )
-				&& in_array( $nm_del, array( 403, 404 ), true )
-				&& in_array( $nm_blk, array( 403, 404 ), true )
-				&& in_array( $nm_unblk, array( 403, 404 ), true )
+				404 === $nm_get->get_status() && 'zmai_user_not_found' === ( $nm_get->get_data()['code'] ?? '' )
+				&& 404 === $nm_post->get_status() && 'zmai_user_not_found' === ( $nm_post->get_data()['code'] ?? '' )
+				&& 404 === $nm_del->get_status() && 'zmai_user_not_found' === ( $nm_del->get_data()['code'] ?? '' )
+				&& 404 === $nm_blk->get_status() && 'zmai_user_not_found' === ( $nm_blk->get_data()['code'] ?? '' )
+				&& 404 === $nm_unblk->get_status() && 'zmai_user_not_found' === ( $nm_unblk->get_data()['code'] ?? '' )
 				&& 200 === $nm_bulk->get_status()
-				&& '' !== $bulk_failed
+				&& 'zmai_user_not_found' === $bulk_failed
 				&& ! $store->is_blocked( $nonmember_id ),
-				'multisite subsite admin cannot inspect or mutate non-member user via REST'
+				'multisite subsite admin receives uniform 404 zmai_user_not_found for non-member users via REST'
 			);
 			restore_current_blog();
 		}

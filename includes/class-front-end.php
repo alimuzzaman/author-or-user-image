@@ -203,7 +203,8 @@ final class Front_End {
 			$user_id      = get_current_user_id();
 			$id           = wp_unique_id( 'zmai-avatar-' );
 			$preview_size = $opts['previewSize'] > 0 ? $opts['previewSize'] : $this->store->get_size();
-			$url          = $this->store->get_url( $user_id, $preview_size, false );
+			$blocked      = $this->store->is_blocked( $user_id );
+			$url          = $blocked ? '' : $this->store->get_url( $user_id, $preview_size, false );
 			$action       = add_query_arg(
 				array(
 					'action'       => 'zmai_save_avatar',
@@ -219,7 +220,7 @@ final class Front_End {
 			<?php if ( $url && $opts['showPreview'] ) : ?>
 				<img class="zmai-avatar-preview" src="<?php echo esc_url( $url ); ?>" alt="<?php esc_attr_e( 'Your current avatar', 'author-or-user-image' ); ?>" width="<?php echo absint( $preview_size ); ?>" height="<?php echo absint( $preview_size ); ?>">
 			<?php endif; ?>
-			<?php if ( $this->store->is_blocked( $user_id ) ) : ?>
+			<?php if ( $blocked ) : ?>
 				<p><?php esc_html_e( 'An administrator has disabled local avatar uploads for your account.', 'author-or-user-image' ); ?></p>
 			<?php elseif ( $this->policy->can_upload( $user_id ) ) : ?>
 				<form class="zmai-upload-form" method="post" enctype="multipart/form-data" action="<?php echo esc_url( $action ); ?>">
@@ -244,7 +245,7 @@ final class Front_End {
 			<?php else : ?>
 				<p><?php esc_html_e( 'Your role is not allowed to upload a new avatar on this site. You can still remove your avatar.', 'author-or-user-image' ); ?></p>
 			<?php endif; ?>
-			<?php if ( $url && current_user_can( 'read' ) ) : ?>
+			<?php if ( $url && ! $blocked && current_user_can( 'read' ) ) : ?>
 				<form class="zmai-remove-form" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 					<input type="hidden" name="action" value="zmai_remove_avatar">
 					<input type="hidden" name="avatar_type" value="user">

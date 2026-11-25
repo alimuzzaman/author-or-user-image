@@ -67,24 +67,22 @@ final class REST_API {
 				'args'                => array(
 					'role'     => array(
 						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_key',
+						'validate_callback' => 'rest_validate_request_arg',
 					),
 					'page'     => array(
-						'type'    => 'integer',
-						'default' => 1,
-						'minimum' => 1,
+						'type'              => 'integer',
+						'default'           => 1,
+						'minimum'           => 1,
+						'validate_callback' => 'rest_validate_request_arg',
 					),
 					'per_page' => array(
-						'type'    => 'integer',
-						'default' => 20,
-						'minimum' => 1,
-						'maximum' => 50,
+						'type'              => 'integer',
+						'default'           => 20,
+						'minimum'           => 1,
+						'maximum'           => 50,
+						'validate_callback' => 'rest_validate_request_arg',
 					),
-					'size'     => array(
-						'type'    => 'integer',
-						'minimum' => 16,
-						'maximum' => 1024,
-					),
+					'size'     => $this->size_arg(),
 				),
 			)
 		);
@@ -99,11 +97,7 @@ final class REST_API {
 					'permission_callback' => array( $this, 'check_user_read_permission' ),
 					'args'                => array(
 						'user_id' => $this->user_id_arg(),
-						'size'    => array(
-							'type'    => 'integer',
-							'minimum' => 16,
-							'maximum' => 1024,
-						),
+						'size'    => $this->size_arg(),
 					),
 				),
 				array(
@@ -112,11 +106,7 @@ final class REST_API {
 					'permission_callback' => array( $this, 'check_user_upload_permission' ),
 					'args'                => array(
 						'user_id' => $this->user_id_arg(),
-						'size'    => array(
-							'type'    => 'integer',
-							'minimum' => 16,
-							'maximum' => 1024,
-						),
+						'size'    => $this->size_arg(),
 					),
 				),
 				array(
@@ -125,11 +115,7 @@ final class REST_API {
 					'permission_callback' => array( $this, 'check_user_remove_permission' ),
 					'args'                => array(
 						'user_id' => $this->user_id_arg(),
-						'size'    => array(
-							'type'    => 'integer',
-							'minimum' => 16,
-							'maximum' => 1024,
-						),
+						'size'    => $this->size_arg(),
 					),
 				),
 			)
@@ -144,11 +130,7 @@ final class REST_API {
 					'callback'            => array( $this, 'get_default_avatar' ),
 					'permission_callback' => array( $this, 'check_admin_permission' ),
 					'args'                => array(
-						'size' => array(
-							'type'    => 'integer',
-							'minimum' => 16,
-							'maximum' => 1024,
-						),
+						'size' => $this->size_arg(),
 					),
 				),
 				array(
@@ -156,11 +138,7 @@ final class REST_API {
 					'callback'            => array( $this, 'upload_default_avatar' ),
 					'permission_callback' => array( $this, 'check_admin_permission' ),
 					'args'                => array(
-						'size' => array(
-							'type'    => 'integer',
-							'minimum' => 16,
-							'maximum' => 1024,
-						),
+						'size' => $this->size_arg(),
 					),
 				),
 				array(
@@ -168,11 +146,7 @@ final class REST_API {
 					'callback'            => array( $this, 'delete_default_avatar' ),
 					'permission_callback' => array( $this, 'check_admin_permission' ),
 					'args'                => array(
-						'size' => array(
-							'type'    => 'integer',
-							'minimum' => 16,
-							'maximum' => 1024,
-						),
+						'size' => $this->size_arg(),
 					),
 				),
 			)
@@ -188,29 +162,26 @@ final class REST_API {
 					'permission_callback' => array( $this, 'check_admin_permission' ),
 					'args'                => array(
 						'page'     => array(
-							'type'    => 'integer',
-							'default' => 1,
-							'minimum' => 1,
+							'type'              => 'integer',
+							'default'           => 1,
+							'minimum'           => 1,
+							'validate_callback' => 'rest_validate_request_arg',
 						),
 						'per_page' => array(
-							'type'    => 'integer',
-							'default' => 20,
-							'minimum' => 1,
-							'maximum' => 50,
+							'type'              => 'integer',
+							'default'           => 20,
+							'minimum'           => 1,
+							'maximum'           => 50,
+							'validate_callback' => 'rest_validate_request_arg',
 						),
 					),
 				),
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'block_user' ),
-					'permission_callback' => array( $this, 'check_admin_user_param_permission' ),
+					'permission_callback' => array( $this, 'check_admin_permission' ),
 					'args'                => array(
-						'user_id' => array(
-							'required'          => true,
-							'type'              => 'integer',
-							'minimum'           => 1,
-							'sanitize_callback' => 'absint',
-						),
+						'user_id' => $this->user_id_arg(),
 					),
 				),
 			)
@@ -238,9 +209,10 @@ final class REST_API {
 				'permission_callback' => array( $this, 'check_admin_permission' ),
 				'args'                => array(
 					'action'   => array(
-						'required' => true,
-						'type'     => 'string',
-						'enum'     => array( 'delete', 'block', 'unblock' ),
+						'required'          => true,
+						'type'              => 'string',
+						'enum'              => array( 'delete', 'block', 'unblock' ),
+						'validate_callback' => 'rest_validate_request_arg',
 					),
 					'user_ids' => array(
 						'required'          => true,
@@ -294,7 +266,7 @@ final class REST_API {
 		if ( ! is_user_logged_in() ) {
 			return false;
 		}
-		$user_id = absint( $request['user_id'] );
+		$user_id = $this->path_user_id( $request );
 		if ( get_current_user_id() === $user_id ) {
 			return $this->can_self_access( $user_id );
 		}
@@ -311,7 +283,7 @@ final class REST_API {
 		if ( ! is_user_logged_in() ) {
 			return false;
 		}
-		$user_id = absint( $request['user_id'] );
+		$user_id = $this->path_user_id( $request );
 		if ( get_current_user_id() === $user_id ) {
 			return $this->can_self_access( $user_id ) && $this->policy->can_upload( $user_id );
 		}
@@ -328,7 +300,7 @@ final class REST_API {
 		if ( ! is_user_logged_in() ) {
 			return false;
 		}
-		$user_id = absint( $request['user_id'] );
+		$user_id = $this->path_user_id( $request );
 		if ( get_current_user_id() === $user_id ) {
 			return $this->can_self_access( $user_id );
 		}
@@ -336,13 +308,13 @@ final class REST_API {
 	}
 
 	/**
-	 * Authorize admin mutations targeting a supplied user_id parameter.
+	 * Authorize admin mutations targeting a supplied user_id path parameter.
 	 *
 	 * @param WP_REST_Request $request Incoming request.
 	 * @return bool|WP_Error
 	 */
 	public function check_admin_user_param_permission( WP_REST_Request $request ) {
-		return $this->check_target_user_admin( absint( $request['user_id'] ) );
+		return $this->check_target_user_admin( $this->path_user_id( $request ) );
 	}
 
 	/**
@@ -382,7 +354,7 @@ final class REST_API {
 
 		if ( is_string( $role ) && '' !== $role ) {
 			$known = wp_roles()->roles;
-			if ( ! is_array( $known ) || ! isset( $known[ $role ] ) ) {
+			if ( sanitize_key( $role ) !== $role || ! is_array( $known ) || ! isset( $known[ $role ] ) ) {
 				return new WP_Error( 'zmai_invalid_role', __( 'Unknown role filter.', 'author-or-user-image' ), array( 'status' => 400 ) );
 			}
 			$args['role'] = $role;
@@ -395,14 +367,15 @@ final class REST_API {
 				continue;
 			}
 			$uid     = (int) $user->ID;
-			$url     = $this->store->get_url( $uid, $size, false );
+			$blocked = $this->store->is_blocked( $uid );
+			$url     = $blocked ? '' : $this->store->get_url( $uid, $size, false );
 			$items[] = array(
 				'user_id'          => $uid,
 				'user_login'       => $user->user_login,
 				'display_name'     => $user->display_name,
-				'attachment_id'    => $this->store->get_user_attachment_id( $uid ),
+				'attachment_id'    => $blocked ? 0 : $this->store->get_user_attachment_id( $uid ),
 				'url'              => $url,
-				'blocked'          => $this->store->is_blocked( $uid ),
+				'blocked'          => $blocked,
 				'has_local_avatar' => '' !== $url,
 			);
 		}
@@ -417,7 +390,7 @@ final class REST_API {
 	 * @return WP_REST_Response
 	 */
 	public function get_user_avatar( WP_REST_Request $request ) {
-		$user_id = absint( $request['user_id'] );
+		$user_id = $this->path_user_id( $request );
 		$size    = $this->requested_size( $request );
 		return new WP_REST_Response( $this->build_avatar_payload( $user_id, $size ), 200 );
 	}
@@ -429,7 +402,7 @@ final class REST_API {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function upload_user_avatar( WP_REST_Request $request ) {
-		$user_id = absint( $request['user_id'] );
+		$user_id = $this->path_user_id( $request );
 		$field   = $this->detect_file_field( $request, array( 'file', 'user_avatar' ) );
 		if ( is_wp_error( $field ) ) {
 			return $field;
@@ -451,7 +424,7 @@ final class REST_API {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function delete_user_avatar( WP_REST_Request $request ) {
-		$user_id = absint( $request['user_id'] );
+		$user_id = $this->path_user_id( $request );
 		$result  = $this->store->delete_user_avatar( $user_id );
 		if ( is_wp_error( $result ) ) {
 			return $this->map_error( $result );
@@ -562,8 +535,16 @@ final class REST_API {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function block_user( WP_REST_Request $request ) {
-		$user_id = absint( $request['user_id'] );
-		$result  = $this->store->set_blocked( $user_id, true );
+		$user_id    = absint( $request['user_id'] );
+		$authorized = $this->check_target_user_admin( $user_id );
+		if ( is_wp_error( $authorized ) ) {
+			return $authorized;
+		}
+		if ( true !== $authorized ) {
+			return new WP_Error( 'zmai_forbidden', Admin::upload_error_message( 'zmai_forbidden' ), array( 'status' => 403 ) );
+		}
+
+		$result = $this->store->set_blocked( $user_id, true );
 		if ( is_wp_error( $result ) ) {
 			return $this->map_error( $result );
 		}
@@ -584,7 +565,7 @@ final class REST_API {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function unblock_user( WP_REST_Request $request ) {
-		$user_id = absint( $request['user_id'] );
+		$user_id = $this->path_user_id( $request );
 		$result  = $this->store->set_blocked( $user_id, false );
 		if ( is_wp_error( $result ) ) {
 			return $this->map_error( $result );
@@ -606,7 +587,7 @@ final class REST_API {
 	 * @return bool
 	 */
 	public function validate_bulk_user_ids( $value ) {
-		if ( ! is_array( $value ) || count( $value ) < 1 || count( $value ) > 50 ) {
+		if ( ! is_array( $value ) || count( $value ) < 1 || count( $value ) > 50 || array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) {
 			return false;
 		}
 		foreach ( $value as $item ) {
@@ -736,6 +717,9 @@ final class REST_API {
 			}
 			$saved = $this->policy->save_policy( $raw_policy );
 			if ( is_wp_error( $saved ) ) {
+				if ( 'zmai_storage' === $saved->get_error_code() ) {
+					return new WP_Error( 'zmai_storage', __( 'Settings could not be saved completely. Please retry.', 'author-or-user-image' ), array( 'status' => 500 ) );
+				}
 				return $this->map_error( $saved );
 			}
 		}
@@ -751,7 +735,18 @@ final class REST_API {
 	}
 
 	/**
-	 * Shared route argument definition for user_id path params.
+	 * Extract the validated path user_id without allowing query or body shadowing.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return int
+	 */
+	private function path_user_id( WP_REST_Request $request ) {
+		$url_params = $request->get_url_params();
+		return isset( $url_params['user_id'] ) ? absint( $url_params['user_id'] ) : 0;
+	}
+
+	/**
+	 * Shared route argument definition for user_id parameters.
 	 *
 	 * @return array
 	 */
@@ -760,7 +755,22 @@ final class REST_API {
 			'required'          => true,
 			'type'              => 'integer',
 			'minimum'           => 1,
+			'validate_callback' => 'rest_validate_request_arg',
 			'sanitize_callback' => 'absint',
+		);
+	}
+
+	/**
+	 * Shared route argument definition for optional preview size parameters.
+	 *
+	 * @return array
+	 */
+	private function size_arg() {
+		return array(
+			'type'              => 'integer',
+			'minimum'           => 16,
+			'maximum'           => 1024,
+			'validate_callback' => 'rest_validate_request_arg',
 		);
 	}
 
@@ -790,14 +800,11 @@ final class REST_API {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return false;
 		}
-		if ( $user_id < 1 || ! get_userdata( $user_id ) ) {
+		if ( $user_id < 1 || ! get_userdata( $user_id ) || ( is_multisite() && ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) ) {
 			return new WP_Error( 'zmai_user_not_found', __( 'The requested user was not found.', 'author-or-user-image' ), array( 'status' => 404 ) );
 		}
 		if ( ! current_user_can( 'edit_user', $user_id ) ) {
 			return false;
-		}
-		if ( is_multisite() && ! is_user_member_of_blog( $user_id, get_current_blog_id() ) ) {
-			return new WP_Error( 'zmai_user_not_found', __( 'The requested user is not a member of this site.', 'author-or-user-image' ), array( 'status' => 404 ) );
 		}
 		return true;
 	}
@@ -816,7 +823,31 @@ final class REST_API {
 				return $candidate;
 			}
 		}
+		if ( $this->is_oversized_post_body( $request, $files ) ) {
+			return new WP_Error( 'zmai_upload_size', Admin::upload_error_message( 'zmai_upload_size' ), array( 'status' => 400 ) );
+		}
 		return new WP_Error( 'zmai_upload_missing', __( 'Choose an image file to upload.', 'author-or-user-image' ), array( 'status' => 400 ) );
+	}
+
+	/**
+	 * Detect whether PHP discarded an oversized multipart request body before populating files.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @param array           $files   Uploaded file parameters.
+	 * @return bool
+	 */
+	private function is_oversized_post_body( WP_REST_Request $request, array $files ) {
+		$limit = wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) );
+		if ( $limit <= 0 || $files || $request->get_body_params() ) {
+			return false;
+		}
+		$header = $request->get_header( 'content-length' );
+		if ( is_string( $header ) && '' !== $header ) {
+			$length = trim( $header );
+		} else {
+			$length = isset( $_SERVER['CONTENT_LENGTH'] ) && is_string( $_SERVER['CONTENT_LENGTH'] ) ? trim( sanitize_text_field( wp_unslash( $_SERVER['CONTENT_LENGTH'] ) ) ) : '';
+		}
+		return '' !== $length && ctype_digit( $length ) && (float) $length > $limit;
 	}
 
 	/**
@@ -841,14 +872,15 @@ final class REST_API {
 	 * @return array
 	 */
 	private function build_avatar_payload( $user_id, $size ) {
-		$url          = $this->store->get_url( $user_id, $size, false );
-		$fallback_url = $this->store->get_url( $user_id, $size, true );
+		$blocked      = $this->store->is_blocked( $user_id );
+		$url          = $blocked ? '' : $this->store->get_url( $user_id, $size, false );
+		$fallback_url = $blocked ? '' : $this->store->get_url( $user_id, $size, true );
 		return array(
 			'user_id'          => $user_id,
-			'attachment_id'    => $this->store->get_user_attachment_id( $user_id ),
+			'attachment_id'    => $blocked ? 0 : $this->store->get_user_attachment_id( $user_id ),
 			'url'              => $url,
 			'fallback_url'     => $fallback_url,
-			'blocked'          => $this->store->is_blocked( $user_id ),
+			'blocked'          => $blocked,
 			'can_upload'       => $this->policy->can_upload( $user_id ),
 			'has_local_avatar' => '' !== $url,
 		);
