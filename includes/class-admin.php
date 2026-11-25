@@ -279,8 +279,9 @@ final class Admin {
 	 * @return void
 	 */
 	private function reject_oversized_upload() {
-		$limit  = wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) );
-		$length = isset( $_SERVER['CONTENT_LENGTH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['CONTENT_LENGTH'] ) ) : '';
+		$post_max = function_exists( 'ini_get' ) ? (string) ini_get( 'post_max_size' ) : '';
+		$limit    = '' !== $post_max ? wp_convert_hr_to_bytes( $post_max ) : 0;
+		$length   = isset( $_SERVER['CONTENT_LENGTH'] ) ? sanitize_text_field( wp_unslash( $_SERVER['CONTENT_LENGTH'] ) ) : '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Only detect PHP's discarded body; no submitted data is processed and no state is changed.
 		if ( ! current_user_can( 'read' ) || ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] || $_POST || $_FILES || $limit <= 0 || ! ctype_digit( $length ) || (float) $length <= $limit ) {
 			return;

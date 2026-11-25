@@ -526,8 +526,10 @@ final class Migration {
 	 * @return void
 	 */
 	private function report_error( WP_Error $error ) {
-		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Persistent migration/release failures need an operator-visible diagnostic; no values or paths are logged.
-		error_log( 'Author or User Image: legacy migration storage or lock-release failure.' );
+		if ( function_exists( 'error_log' ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Persistent migration/release failures need an operator-visible diagnostic; no values or paths are logged.
+			error_log( 'Author or User Image: legacy migration storage or lock-release failure.' );
+		}
 		do_action( 'zmai_migration_error', $error );
 	}
 
@@ -679,7 +681,12 @@ final class Migration {
 					if ( is_wp_error( $clean ) ) {
 						return $clean;
 					}
-					$id = media_handle_sideload( $file, 0, null, array( 'meta_input' => array( Image_Store::ATTACHMENT_OWNER_META => $this->store->owner_name( $user_id ) ) ) );
+					$owner = $this->store->owner_name( $user_id );
+					$id    = Image_Processor::with_unique_filename_file_list(
+						static function () use ( $file, $owner ) {
+							return media_handle_sideload( $file, 0, null, array( 'meta_input' => array( Image_Store::ATTACHMENT_OWNER_META => $owner ) ) );
+						}
+					);
 				} finally {
 					wp_delete_file( $temporary );
 				}

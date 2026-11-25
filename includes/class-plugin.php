@@ -226,7 +226,7 @@ final class Plugin {
 	 */
 	public function finish_user_deletion( $user_id ) {
 		$result = $this->cleanup->finish_user_deletion( $user_id );
-		if ( is_wp_error( $result ) ) {
+		if ( is_wp_error( $result ) && function_exists( 'error_log' ) ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Core already deleted the user; retain the fence for recovery without aborting bulk deletion.
 			error_log( 'Author or User Image: deletion fence release failed; administrator recovery required.' );
 		}

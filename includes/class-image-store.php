@@ -340,7 +340,7 @@ final class Image_Store {
 		add_filter( 'wp_handle_upload', $remember_file, -99999 );
 		add_action( 'add_attachment', $remember_id, -99999 );
 		try {
-			$result = $callback();
+			$result = Image_Processor::with_unique_filename_file_list( $callback );
 		} catch ( \Throwable $error ) {
 			if ( $wpdb->last_error || ! $stage['file'] ) {
 				throw $error;
@@ -366,7 +366,7 @@ final class Image_Store {
 		// Core may write subsizes before a metadata callback throws. The UUID stem
 		// belongs only to this staging call, so its file inventory is still known.
 		$stem  = pathinfo( $stage['file'], PATHINFO_FILENAME );
-		$files = @scandir( dirname( $stage['file'] ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A failed listing must retain the attachment inventory and owner fence.
+		$files = Image_Processor::list_directory( dirname( $stage['file'] ) );
 		if ( false === $files ) {
 			return $this->storage_error( true );
 		}
@@ -383,7 +383,7 @@ final class Image_Store {
 			$file = dirname( $stage['file'] ) . '/' . $filename;
 			wp_delete_file( $file );
 			clearstatcache( true, $file );
-			if ( is_file( $file ) || is_link( $file ) ) {
+			if ( is_file( $file ) || Image_Processor::is_symlink_path( $file ) ) {
 				// No attachment row remains to retain this file inventory for a retry.
 				return $this->storage_error( true );
 			}

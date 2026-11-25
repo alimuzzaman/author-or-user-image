@@ -131,7 +131,10 @@ The release workflow does not run these WordPress runtime suites.
 ## Review the 3.2 behavior
 
 Run the full SQLite and MySQL single-site/multisite matrices, production WPCS,
-PHP syntax checks on 7.4 through 8.5 and JavaScript syntax checks. Run every
+PHP syntax, static compatibility (`tests/php-compatibility.php` + `--self-test`),
+host `disable_functions` checks (`tests/check-disabled-functions.py`), the full
+PHP `7.4` through `8.5` runtime compatibility matrix (`tests/check-php-matrix.py`),
+and JavaScript syntax checks. Run every
 Playwright suite on the marked wp714 fixture, including the front-end and
 importer specs. Generate the screenshot gallery through that harness and inspect
 its images before copying final PNGs to `.wordpress-org/`.

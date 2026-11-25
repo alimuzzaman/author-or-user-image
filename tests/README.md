@@ -211,3 +211,36 @@ Imagick, including RGB ICC retention, oriented CMYK rejection on GD, scaled
 originals, core-square reuse, fallback squares, imports and legacy copies.
 `http-runtime.py` also checks genuine multipart user/default metadata removal
 under both editors, forged opt-out request fields and `image_strip_meta=false`.
+
+### PHP compatibility & host `disable_functions` matrix
+
+Run static compatibility checks (catching host-disabled calls, unguarded PHP
+`8.0+` APIs, and PHP `7.4`–`8.5` deprecated functions/syntax, plus negative
+self-tests) without a WordPress site:
+
+```sh
+php tests/php-compatibility.php
+php tests/php-compatibility.php --self-test
+```
+
+Run isolated and WordPress-backed `-d disable_functions=...` checks simulating
+popular shared and managed WordPress hosts plus hardened overlays (`scandir`,
+`error_log`, `lstat`, `exif_read_data`, `mb_substr`, `ini_get`):
+
+```sh
+python3 tests/check-disabled-functions.py \
+  --wp-root /absolute/disposable/wordpress \
+  --php /absolute/php-7.4 \
+  --php /absolute/php-8.5
+```
+
+Run the full supported PHP version matrix (`7.4` through `8.5`, plus optional
+advisory `8.6`) combining multi-version `php -l`, static checks, self-tests,
+isolated checks, and strict `E_ALL` deprecation-trapped WordPress runs:
+
+```sh
+python3 tests/check-php-matrix.py --wp-root /absolute/disposable/wordpress
+```
+
+On non-Herd setups, pass `--php /path/to/php-x.y` (repeatable) to override the
+default Herd PHP binary paths.

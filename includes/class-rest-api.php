@@ -837,7 +837,8 @@ final class REST_API {
 	 * @return bool
 	 */
 	private function is_oversized_post_body( WP_REST_Request $request, array $files ) {
-		$limit = wp_convert_hr_to_bytes( ini_get( 'post_max_size' ) );
+		$post_max = function_exists( 'ini_get' ) ? (string) ini_get( 'post_max_size' ) : '';
+		$limit    = '' !== $post_max ? wp_convert_hr_to_bytes( $post_max ) : 0;
 		if ( $limit <= 0 || $files || $request->get_body_params() ) {
 			return false;
 		}

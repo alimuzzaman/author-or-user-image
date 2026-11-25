@@ -57,8 +57,7 @@ final class Image_Processor {
 			return self::error( 'zmai_invalid_image', __( 'Choose a valid local image.', 'author-or-user-image' ) );
 		}
 
-		$file_stat = @lstat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Missing or unreadable local paths are a normal validation failure.
-		if ( ! is_array( $file_stat ) || ! isset( $file_stat['mode'] ) || 0100000 !== ( $file_stat['mode'] & 0170000 ) ) {
+		if ( ! self::is_regular_file( $path ) ) {
 			return self::error( 'zmai_invalid_image', __( 'Choose a readable local image file.', 'author-or-user-image' ) );
 		}
 
@@ -188,18 +187,24 @@ final class Image_Processor {
 			}
 
 			$basename    = 'zmai-avatar-' . str_replace( '-', '', wp_generate_uuid4() ) . '.' . $extension;
-			$unique_name = wp_unique_filename( $real_directory, $basename );
-			$output_path = trailingslashit( $real_directory ) . $unique_name;
-			// Keep this save in its validated format, without changing other media saves.
-			$pin_format = static function () {
-				return array();
-			};
-			add_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
-			try {
-				$saved = $editor->save( $output_path, $validated['type'] );
-			} finally {
-				remove_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
-			}
+			$output_path = '';
+			$saved       = self::with_unique_filename_file_list(
+				static function () use ( $editor, $real_directory, $basename, $validated, &$output_path ) {
+					$unique_name = wp_unique_filename( $real_directory, $basename );
+					$output_path = trailingslashit( $real_directory ) . $unique_name;
+					// Keep this save in its validated format, without changing other media saves.
+					$pin_format = static function () {
+						return array();
+					};
+					add_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
+					try {
+						return $editor->save( $output_path, $validated['type'] );
+					} finally {
+						remove_filter( 'image_editor_output_format', $pin_format, PHP_INT_MAX );
+					}
+				}
+			);
+			$unique_name = basename( $output_path );
 			if ( is_wp_error( $saved ) || ! is_array( $saved ) ) {
 				return self::square_failure( $output_path, __( 'The square image could not be saved.', 'author-or-user-image' ) );
 			}
@@ -413,14 +418,114 @@ final class Image_Processor {
 	}
 
 	/**
+	 * Run a core upload or image-save callback with scandir()-safe filename listing.
+	 *
+	 * @internal
+	 * @param callable $callback Operation invoking wp_unique_filename() or media sideloading.
+	 * @return mixed
+	 */
+	public static function with_unique_filename_file_list( $callback ) {
+		if ( function_exists( 'scandir' ) ) {
+			return $callback();
+		}
+		$list_filter = static function ( $files, $dir ) {
+			return self::filter_unique_filename_file_list( $files, $dir );
+		};
+		add_filter( 'pre_wp_unique_filename_file_list', $list_filter, 10, 2 );
+		try {
+			return $callback();
+		} finally {
+			remove_filter( 'pre_wp_unique_filename_file_list', $list_filter, 10 );
+		}
+	}
+
+	/**
+	 * Short-circuit core wp_unique_filename() scandir() calls when scandir is disabled.
+	 *
+	 * @internal
+	 * @param array<int,string>|null $files Previously filtered directory list.
+	 * @param string                 $dir   Target uploads directory.
+	 * @return array<int,string>|null
+	 */
+	public static function filter_unique_filename_file_list( $files, $dir ) {
+		if ( null !== $files || function_exists( 'scandir' ) ) {
+			return $files;
+		}
+		$listed = self::list_directory( $dir );
+		return is_array( $listed ) ? $listed : array();
+	}
+
+	/**
+	 * List directory entries using scandir or safe core fallbacks when disabled.
+	 *
+	 * @internal
+	 * @param string $directory Local directory path.
+	 * @return array<int,string>|false
+	 */
+	public static function list_directory( $directory ) {
+		if ( ! is_string( $directory ) || '' === $directory || ! is_dir( $directory ) ) {
+			return false;
+		}
+		if ( function_exists( 'scandir' ) ) {
+			$files = @scandir( $directory ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A failed listing is handled by recovery inventory callers.
+			return is_array( $files ) ? $files : false;
+		}
+		if ( class_exists( 'DirectoryIterator' ) ) {
+			try {
+				$files = array();
+				foreach ( new \DirectoryIterator( $directory ) as $item ) {
+					$files[] = $item->getFilename();
+				}
+				return $files;
+			} catch ( \Throwable $error ) {
+				return false;
+			}
+		}
+		if ( function_exists( 'opendir' ) && function_exists( 'readdir' ) && function_exists( 'closedir' ) ) {
+			$handle = @opendir( $directory ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Unreadable directories return false cleanly.
+			if ( false === $handle ) {
+				return false;
+			}
+			$files = array();
+			while ( true ) {
+				$entry = readdir( $handle );
+				if ( false === $entry ) {
+					break;
+				}
+				$files[] = $entry;
+			}
+			closedir( $handle );
+			return $files;
+		}
+		return false;
+	}
+
+	/**
 	 * Confirm that a path is a regular file rather than a directory or symlink.
 	 *
 	 * @param string $path Canonical local path.
 	 * @return bool Whether the path is a regular file.
 	 */
 	private static function is_regular_file( $path ) {
-		$stat = @lstat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Partial output is treated as a failed save.
-		return is_array( $stat ) && isset( $stat['mode'] ) && 0100000 === ( $stat['mode'] & 0170000 );
+		if ( ! is_string( $path ) || '' === $path ) {
+			return false;
+		}
+		if ( function_exists( 'lstat' ) ) {
+			$stat = @lstat( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Partial output is treated as a failed save.
+			return is_array( $stat ) && isset( $stat['mode'] ) && 0100000 === ( $stat['mode'] & 0170000 );
+		}
+		return function_exists( 'is_link' ) && ! is_link( $path ) && is_file( $path );
+	}
+
+	/**
+	 * Safely check whether a path is a symbolic link on hosts that may disable is_link().
+	 *
+	 * @internal
+	 * @param string $path Local filesystem path.
+	 * @return bool
+	 */
+	public static function is_symlink_path( $path ) {
+		return is_string( $path ) && '' !== $path && function_exists( 'is_link' ) && is_link( $path );
 	}
 
 	/**
@@ -430,15 +535,16 @@ final class Image_Processor {
 	 * @return bool Whether the exact generated output is absent.
 	 */
 	private static function remove_file( $path ) {
-		if ( ! is_string( $path ) || ( ! file_exists( $path ) && ! is_link( $path ) ) ) {
+		$is_link = self::is_symlink_path( $path );
+		if ( ! is_string( $path ) || ( ! file_exists( $path ) && ! $is_link ) ) {
 			return true;
 		}
-		if ( ! is_file( $path ) && ! is_link( $path ) ) {
+		if ( ! is_file( $path ) && ! $is_link ) {
 			return false;
 		}
 		wp_delete_file( $path );
 		clearstatcache( true, $path );
-		return ! file_exists( $path ) && ! is_link( $path );
+		return ! file_exists( $path ) && ! self::is_symlink_path( $path );
 	}
 
 	/**
@@ -455,7 +561,7 @@ final class Image_Processor {
 		$inventory_failed = false;
 		if ( $path ) {
 			$stem  = pathinfo( $path, PATHINFO_FILENAME );
-			$files = @scandir( dirname( $path ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A failed cleanup listing is retained as recovery inventory below.
+			$files = self::list_directory( dirname( $path ) );
 			if ( false === $files ) {
 				$inventory_failed = true;
 				$remaining[]      = basename( $path );

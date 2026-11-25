@@ -194,6 +194,7 @@ Major security and standards rewrite. Existing settings and legacy JPG avatars a
 * Added presentation-only attributes (`showPreview`, `previewSize`, `alignment`, `uploadLabel`, `removeLabel`, `loginLabel`) and inspector controls to the Avatar upload block and `[author_or_user_image_upload]` shortcode.
 * Added WP-CLI commands (`wp zmai import sources|status|run|pause|resume|retry|finish` and `wp zmai locks list|unlock`) for batch competitor imports and exact-token lock recovery.
 * Added read-only lifecycle lock diagnostics under **Users > Avatar Management > Settings** without exposing lock tokens in the admin screen.
+* Hardened directory listing, regular-file checks, upload-size checks, and error logging for hosts that disable PHP functions such as scandir, lstat, ini_get, and error_log.
 
 = 3.1.0 =
 
