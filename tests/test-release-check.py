@@ -49,9 +49,9 @@ class ReleaseCheckTests(unittest.TestCase):
     def test_rejects_mismatched_header_version(self) -> None:
         entry = self.project / "author_image.php"
         source = entry.read_text(encoding="utf-8")
-        entry.write_text(source.replace("Version: 3.1.0", "Version: 9.9.9", 1), encoding="utf-8")
+        entry.write_text(source.replace("Version: 3.2.0", "Version: 9.9.9", 1), encoding="utf-8")
         with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, "version"):
-            RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
+            RELEASE_CHECK.validate_release(self.project, "3.2.0", self.output)
 
     def test_rejects_env_path_without_opening_it(self) -> None:
         # Inject only the directory entry, so no .env file is ever opened,
@@ -72,19 +72,19 @@ class ReleaseCheckTests(unittest.TestCase):
 
         with patch.object(Path, "open", guarded_open), patch.object(os, "walk", walk_with_env):
             with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, r"\.env"):
-                RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
+                RELEASE_CHECK.validate_release(self.project, "3.2.0", self.output)
 
     def test_rejects_patch_tested_up_to_version(self) -> None:
         readme = self.project / "readme.txt"
         source = re.sub(r"(?m)^Tested up to:.*$", "Tested up to: 7.1.3", readme.read_text(encoding="utf-8"))
         readme.write_text(source, encoding="utf-8")
         with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, "Tested up to"):
-            RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
+            RELEASE_CHECK.validate_release(self.project, "3.2.0", self.output)
 
     def test_rejects_missing_production_file(self) -> None:
         (self.project / "uninstall.php").unlink()
         with self.assertRaisesRegex(RELEASE_CHECK.ReleaseCheckError, "uninstall.php"):
-            RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
+            RELEASE_CHECK.validate_release(self.project, "3.2.0", self.output)
 
     def test_required_lifecycle_classes_are_packaged(self) -> None:
         self.assertTrue({"includes/class-lock.php", "includes/class-migration.php", "includes/class-user-cleanup.php"}.issubset(RELEASE_CHECK.PRODUCTION_FILES))
@@ -106,7 +106,7 @@ class ReleaseCheckTests(unittest.TestCase):
             dev_file.parent.mkdir(parents=True, exist_ok=True)
             dev_file.write_text("development only", encoding="utf-8")
 
-        report = RELEASE_CHECK.validate_release(self.project, "3.1.0", self.output)
+        report = RELEASE_CHECK.validate_release(self.project, "3.2.0", self.output)
         with zipfile.ZipFile(report.zip_path) as archive:
             members = tuple(sorted(archive.namelist()))
 
