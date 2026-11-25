@@ -94,6 +94,10 @@ final class Plugin {
 		new Front_End( $this->store );
 		new Privacy( $this->store, $this->cleanup );
 		new REST_API( $this->store );
+
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			CLI::register( $this->store, $this->migration );
+		}
 	}
 
 	/**
